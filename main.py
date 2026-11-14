@@ -1,3 +1,7 @@
+# ==========================================
+# IMPORTS
+# ==========================================
+
 from core.dataset_loader import load_dataset
 from core.data_analyzer import analyze_dataset
 from core.problem_detector import detect_problem_type
@@ -5,31 +9,37 @@ from core.data_preparer import separate_features_target
 from core.data_splitter import split_dataset
 from core.model_selector import get_candidate_models
 from core.preprocessor import build_preprocessor
+from core.trainer import train_models
+from core.evaluator import evaluate_models
 
 
-
-
-
-
-
+# ==========================================
+# MAIN FUNCTION
+# ==========================================
 
 def main():
 
-    print("\n===================================")
-    print("          MODELMIND")
-    print("    ML ANALYSIS & ADVISOR")
-    print("===================================\n")
+    print("\n======================================")
+    print("              MODELMIND")
+    print("       ML ANALYSIS & ADVISOR")
+    print("======================================")
 
-    file_path = input("Enter dataset path: ")
+    file_path = input("\nEnter dataset path: ")
 
     try:
 
-        # Load dataset
+        # ----------------------------------
+        # 1. LOAD DATASET
+        # ----------------------------------
+
         df = load_dataset(file_path)
 
         print("\n[+] Dataset loaded successfully!")
 
-        # Analyze dataset
+        # ----------------------------------
+        # 2. DATASET ANALYSIS
+        # ----------------------------------
+
         analysis = analyze_dataset(df)
 
         print("\n========== DATASET OVERVIEW ==========")
@@ -42,18 +52,52 @@ def main():
 
         for column, dtype in analysis["data_types"].items():
             print(f"{column}: {dtype}")
+
+        print("\n========== MISSING VALUES ==========")
+
+        for column, count in analysis["missing_values"].items():
+
+            percentage = analysis["missing_percentage"][column]
+
+            print(f"{column}: {count} ({percentage}%)")
+
+        print("\n========== UNIQUE VALUES ==========")
+
+        for column, count in analysis["unique_values"].items():
+            print(f"{column}: {count}")
+
+        print("\n========== STATISTICAL SUMMARY ==========")
+
+        print(analysis["statistical_summary"])
+
+        print("\n========== NUMERICAL CORRELATION ==========")
+
+        print(analysis["numerical_correlation"])
+
+        # ----------------------------------
+        # 3. PROBLEM TYPE DETECTION
+        # ----------------------------------
+
         target_column = input("\nEnter target column: ")
+
+        problem_type = detect_problem_type(df, target_column)
+
+        print(f"\nDetected problem: {problem_type.upper()}")
+
+        # ----------------------------------
+        # 4. FEATURE-TARGET SEPARATION
+        # ----------------------------------
+
         X, y = separate_features_target(df, target_column)
 
         print("\n========== FEATURE-TARGET SEPARATION ==========")
-        print("Features (X):")
-        print(X.head())
 
-        print("\nTarget (y):")
-        print(y.head())
+        print(f"Features shape: {X.shape}")
+        print(f"Target shape: {y.shape}")
 
-        print(f"\nNumber of features: {X.shape[1]}")
-        print(f"Number of records: {X.shape[0]}")
+        # ----------------------------------
+        # 5. TRAIN-TEST SPLIT
+        # ----------------------------------
 
         X_train, X_test, y_train, y_test = split_dataset(X, y)
 
@@ -65,61 +109,87 @@ def main():
         print(f"X_train shape: {X_train.shape}")
         print(f"X_test shape: {X_test.shape}")
 
-        print(f"y_train shape: {y_train.shape}")
-        print(f"y_test shape: {y_test.shape}")
-
-        print("\n========== MISSING VALUES ==========")
-
-        for column, count in analysis["missing_values"].items():
-            percentage = analysis["missing_percentage"][column]
-
-            print(f"{column}: {count} ({percentage}%)")
-
-        print("\n========== UNIQUE VALUES ==========")
-
-        for column, count in analysis["unique_values"].items():
-            print(f"{column}: {count}")
-
-        # Build preprocessing pipeline
-        preprocessor = build_preprocessor(X_train)
-
-        # Fit on training data and transform it
-        X_train_processed = preprocessor.fit_transform(X_train)
-
-        # Transform testing data using the same fitted preprocessor
-        X_test_processed = preprocessor.transform(X_test)
-
-        print("\n========== PREPROCESSING RESULTS ==========")
-
-        print(f"Original training shape: {X_train.shape}")
-        print(f"Processed training shape: {X_train_processed.shape}")
-
-        print(f"Original testing shape: {X_test.shape}")
-        print(f"Processed testing shape: {X_test_processed.shape}")
-
-        print("\n========== STATISTICAL SUMMARY ==========")
-
-        print(analysis["statistical_summary"])
-
-        print("\n========== NUMERICAL CORRELATION ==========")
-
-        print(analysis["numerical_correlation"])
-
-        problem_type = detect_problem_type(df, target_column)
-
-        print(f"\nDetected problem: {problem_type.upper()}")
+        # ----------------------------------
+        # 6. MODEL SELECTION
+        # ----------------------------------
 
         models = get_candidate_models(problem_type)
+
         print("\n========== CANDIDATE MODELS ==========")
 
         for model_name in models:
             print(model_name)
 
+        # ----------------------------------
+        # 7. PREPROCESSING
+        # ----------------------------------
 
-    except (FileNotFoundError, ValueError, TypeError) as e:
+        preprocessor = build_preprocessor(X_train)
 
-        print(f"\n[ERROR] {e}")
+        print("\n[+] Preprocessing pipeline created.")
 
+        # ----------------------------------
+        # 8. MODEL TRAINING
+        # ----------------------------------
+
+        trained_models, failed_models = train_models(
+            models,
+            preprocessor,
+            X_train,
+            y_train
+        )
+
+        print("\n========== MODEL TRAINING RESULTS ==========")
+
+        for model_name in trained_models:
+            print(f"[SUCCESS] {model_name} trained successfully.")
+
+        for model_name, error in failed_models.items():
+            print(f"\n[FAILED] {model_name}")
+            print(f"Reason: {error}")
+
+        print("\n======================================")
+        print("       MODEL TRAINING COMPLETED")
+        print("======================================")
+
+        # ----------------------------------
+        # 9. MODEL EVALUATION
+        # ----------------------------------
+
+        evaluation_results, evaluation_failures = evaluate_models(
+            trained_models,
+            X_test,
+            y_test,
+            problem_type
+        )
+
+        print("\n========== MODEL EVALUATION RESULTS ==========")
+
+        for model_name, metrics in evaluation_results.items():
+
+            print(f"\nModel: {model_name}")
+
+            for metric_name, value in metrics.items():
+
+                if value is None:
+                    print(f"{metric_name}: N/A (insufficient test records)")
+
+                else:
+                    print(f"{metric_name}: {value:.4f}")
+
+        for model_name, error in evaluation_failures.items():
+
+            print(f"\n[EVALUATION FAILED] {model_name}")
+            print(f"Reason: {error}")
+
+    except (FileNotFoundError, ValueError, TypeError) as error:
+
+        print(f"\n[ERROR] {error}")
+
+
+# ==========================================
+# PROGRAM ENTRY POINT
+# ==========================================
 
 if __name__ == "__main__":
     main()
