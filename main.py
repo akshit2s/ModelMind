@@ -3,6 +3,12 @@ from core.data_analyzer import analyze_dataset
 from core.problem_detector import detect_problem_type
 from core.data_preparer import separate_features_target
 from core.data_splitter import split_dataset
+from core.model_selector import get_candidate_models
+from core.preprocessor import build_preprocessor
+
+
+
+
 
 
 
@@ -74,6 +80,23 @@ def main():
         for column, count in analysis["unique_values"].items():
             print(f"{column}: {count}")
 
+        # Build preprocessing pipeline
+        preprocessor = build_preprocessor(X_train)
+
+        # Fit on training data and transform it
+        X_train_processed = preprocessor.fit_transform(X_train)
+
+        # Transform testing data using the same fitted preprocessor
+        X_test_processed = preprocessor.transform(X_test)
+
+        print("\n========== PREPROCESSING RESULTS ==========")
+
+        print(f"Original training shape: {X_train.shape}")
+        print(f"Processed training shape: {X_train_processed.shape}")
+
+        print(f"Original testing shape: {X_test.shape}")
+        print(f"Processed testing shape: {X_test_processed.shape}")
+
         print("\n========== STATISTICAL SUMMARY ==========")
 
         print(analysis["statistical_summary"])
@@ -85,6 +108,12 @@ def main():
         problem_type = detect_problem_type(df, target_column)
 
         print(f"\nDetected problem: {problem_type.upper()}")
+
+        models = get_candidate_models(problem_type)
+        print("\n========== CANDIDATE MODELS ==========")
+
+        for model_name in models:
+            print(model_name)
 
 
     except (FileNotFoundError, ValueError, TypeError) as e:
