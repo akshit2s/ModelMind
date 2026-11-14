@@ -15,6 +15,7 @@ from core.model_comparator import rank_models
 from core.diagnostics import diagnose_models
 from core.optimizer import generate_optimization_plan
 from core.optimization_runner import optimize_model
+from core.explainer import explain_model
 
 
 # ==========================================
@@ -244,7 +245,47 @@ def main():
                 print(model_name)
 
         # ----------------------------------
-        # 11. MODEL DIAGNOSTICS
+        # 11. MODEL EXPLAINABILITY
+        # ----------------------------------
+
+        if ranked_results:
+
+            top_model_name = ranked_results[0]["model_name"]
+
+            top_model = trained_models[top_model_name]
+
+            explanation = explain_model(
+                top_model,
+                X_test,
+                y_test,
+                problem_type
+            )
+
+            print("\n========== FEATURE IMPORTANCE ==========")
+
+            print(f"Model: {top_model_name}")
+
+            print(f"Status: {explanation['status']}")
+
+            print(explanation["message"] if "message" in explanation else "")
+
+            if explanation["status"] == "SUCCESS":
+
+                for item in explanation["feature_importance"]:
+
+                    print(f"\nFeature: {item['feature']}")
+
+                    print(
+                        f"Importance: {item['importance']:.4f}"
+                    )
+
+                    print(
+                        f"Standard Deviation: "
+                        f"{item['standard_deviation']:.4f}"
+                    )
+
+        # ----------------------------------
+        # 12. MODEL DIAGNOSTICS
         # ----------------------------------
 
         diagnostic_results, diagnostic_failures = diagnose_models(
@@ -281,7 +322,7 @@ def main():
             print(f"Reason: {error}")
 
         # ----------------------------------
-        # 12. OPTIMIZATION RECOMMENDATIONS
+        # 13. OPTIMIZATION RECOMMENDATIONS
         # ----------------------------------
 
         optimization_plans = generate_optimization_plan(
@@ -306,7 +347,7 @@ def main():
             )
 
         # ----------------------------------
-        # 13. USER-APPROVED OPTIMIZATION
+        # 14. USER-APPROVED OPTIMIZATION
         # ----------------------------------
 
         if ranked_results:
