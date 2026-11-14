@@ -16,6 +16,10 @@ from core.diagnostics import diagnose_models
 from core.optimizer import generate_optimization_plan
 from core.optimization_runner import optimize_model
 from core.explainer import explain_model
+from core.experiment_tracker import (
+    save_experiment_run,
+    get_recent_experiments
+)
 
 
 # ==========================================
@@ -442,6 +446,88 @@ def main():
                         print(f"[FAILED] {model_name}: {error}")
             else:
                 print("\nOptimization skipped. Original models remain unchanged.")
+
+        # ----------------------------------
+        # EXPERIMENT TRACKING
+        # ----------------------------------
+
+        print("\n========== EXPERIMENT TRACKING ==========")
+
+        # Create a lookup for model rankings
+        rank_positions = {
+
+            result["model_name"]: position
+
+            for position, result in enumerate(
+                ranked_results,
+                start=1
+            )
+        }
+
+        # Prepare records for storage
+        model_records = []
+
+        for model_name, metrics in evaluation_results.items():
+
+            diagnosis = diagnostic_results.get(
+                model_name, {}
+            )
+
+            model_records.append({
+
+                "model_name": model_name,
+
+                "metrics": metrics,
+
+                "rank": rank_positions.get(model_name),
+
+                "diagnosis": diagnosis.get("diagnosis"),
+
+                "optimization_status": None
+
+            })
+
+
+        # Save the experiment
+        if model_records:
+
+            run_id = save_experiment_run(
+
+                problem_type=problem_type,
+
+                target_column=target_column,
+
+                dataset_rows=len(df),
+
+                feature_count=X.shape[1],
+
+                model_records=model_records
+
+            )
+
+            print(f"[+] Experiment saved successfully!")
+
+            print(f"Experiment ID: {run_id}")
+
+
+        # Display recent experiment history
+        print("\n========== RECENT EXPERIMENTS ==========")
+
+        recent_experiments = get_recent_experiments(limit=10)
+
+        for experiment in recent_experiments:
+
+            print(f"\nRun ID: {experiment['run_id']}")
+
+            print(f"Model: {experiment['model_name']}")
+
+            print(f"Problem: {experiment['problem_type']}")
+
+            print(f"Rank: {experiment['model_rank']}")
+
+            print(f"Metrics: {experiment['metrics']}")
+
+            print(f"Diagnosis: {experiment['diagnosis']}")
 
     except (FileNotFoundError, ValueError, TypeError) as error:
 

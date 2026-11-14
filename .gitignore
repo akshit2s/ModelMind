@@ -56,3 +56,8 @@ reports/*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local experiment database
+experiments/*.db
+experiments/*.db-*
+!experiments/.gitkeep
