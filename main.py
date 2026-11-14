@@ -12,6 +12,7 @@ from core.preprocessor import build_preprocessor
 from core.trainer import train_models
 from core.evaluator import evaluate_models
 from core.model_comparator import rank_models
+from core.diagnostics import diagnose_models
 
 
 # ==========================================
@@ -239,6 +240,43 @@ def main():
 
             for model_name in unranked_models:
                 print(model_name)
+
+        # ----------------------------------
+        # 11. MODEL DIAGNOSTICS
+        # ----------------------------------
+
+        diagnostic_results, diagnostic_failures = diagnose_models(
+            trained_models,
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            problem_type
+        )
+
+        print("\n========== MODEL DIAGNOSTICS ==========")
+
+        for model_name, result in diagnostic_results.items():
+
+            print(f"\nModel: {model_name}")
+            print(f"Diagnosis: {result['diagnosis']}")
+
+            print(f"Metric: {result['metric']}")
+            print(f"Training Score: {result['train_score']}")
+            print(f"Testing Score: {result['test_score']}")
+            print(f"Performance Gap: {result['performance_gap']}")
+
+            print(f"Explanation: {result['explanation']}")
+
+            print("Recommendations:")
+
+            for recommendation in result["recommendations"]:
+                print(f"- {recommendation}")
+
+        for model_name, error in diagnostic_failures.items():
+
+            print(f"\n[DIAGNOSTIC FAILED] {model_name}")
+            print(f"Reason: {error}")
 
     except (FileNotFoundError, ValueError, TypeError) as error:
 
