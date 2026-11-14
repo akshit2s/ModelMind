@@ -18,8 +18,12 @@ from core.optimization_runner import optimize_model
 from core.explainer import explain_model
 from core.experiment_tracker import (
     save_experiment_run,
-    get_recent_experiments
+    get_recent_experiments,
+    create_dataset_fingerprint
 )
+
+from core.experiment_comparator import compare_experiment_runs
+
 
 
 # ==========================================
@@ -490,7 +494,8 @@ def main():
 
         # Save the experiment
         if model_records:
-
+            dataset_fingerprint = create_dataset_fingerprint(df)
+            
             run_id = save_experiment_run(
 
                 problem_type=problem_type,
@@ -501,10 +506,11 @@ def main():
 
                 feature_count=X.shape[1],
 
-                model_records=model_records
+                model_records=model_records,
+
+                dataset_fingerprint=dataset_fingerprint
 
             )
-
             print(f"[+] Experiment saved successfully!")
 
             print(f"Experiment ID: {run_id}")
@@ -528,6 +534,52 @@ def main():
             print(f"Metrics: {experiment['metrics']}")
 
             print(f"Diagnosis: {experiment['diagnosis']}")
+
+        # ----------------------------------
+        # EXPERIMENT COMPARISON
+        # ----------------------------------
+
+        comparison_results = compare_experiment_runs(
+            problem_type=problem_type,
+            target_column=target_column,
+            dataset_fingerprint=dataset_fingerprint,
+            primary_metric=ranking_metric
+        )
+
+        print("\n========== EXPERIMENT COMPARISON ==========")
+
+        if len(comparison_results) >= 2:
+
+            for position, result in enumerate(
+                comparison_results,
+                start=1
+            ):
+
+                print(f"\nExperiment Rank: {position}")
+
+                print(f"Run ID: {result['run_id']}")
+
+                print(f"Model: {result['model_name']}")
+
+                print(
+                    f"{result['metric_name']}: "
+                    f"{result['metric_value']:.4f}"
+                )
+
+            print("\nBEST EXPERIMENT:")
+            print(comparison_results[0]["run_id"])
+
+        else:
+
+            print(
+                "Not enough matching experiment runs "
+                "to perform a comparison."
+            )
+
+            print(
+                "Run ModelMind again using the same dataset "
+                "and prediction objective."
+            )
 
     except (FileNotFoundError, ValueError, TypeError) as error:
 

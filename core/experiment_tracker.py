@@ -4,12 +4,33 @@ import sqlite3
 import json
 import uuid
 import math
+import hashlib
+import pandas as pd
 
 
 # Local database location
 DB_PATH = Path("experiments") / "modelmind.db"
 
+def create_dataset_fingerprint(df):
 
+    # Include column names and data types in the fingerprint
+    schema = "|".join(
+        f"{column}:{dtype}"
+        for column, dtype in zip(df.columns, df.dtypes)
+    )
+
+    # Generate hashes for dataset rows
+    row_hashes = pd.util.hash_pandas_object(
+        df,
+        index=True
+    ).values.tobytes()
+
+    # Combine schema and row hashes
+    fingerprint = hashlib.sha256(
+        schema.encode() + row_hashes
+    ).hexdigest()
+
+    return fingerprint
 def initialize_experiment_store():
 
     # Create the experiments directory if it doesn't exist
@@ -31,6 +52,8 @@ def initialize_experiment_store():
                 dataset_rows INTEGER NOT NULL,
                 feature_count INTEGER NOT NULL,
 
+                dataset_fingerprint TEXT,
+
                 model_name TEXT NOT NULL,
 
                 metrics_json TEXT NOT NULL,
@@ -39,10 +62,24 @@ def initialize_experiment_store():
 
                 diagnosis TEXT,
 
+
                 optimization_status TEXT
 
             )
         """)
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(model_experiments)"
+            ).fetchall()
+        }
+
+        if "dataset_fingerprint" not in columns:
+
+            connection.execute("""
+                ALTER TABLE model_experiments
+                ADD COLUMN dataset_fingerprint TEXT
+            """)
 
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_run_id
@@ -81,7 +118,8 @@ def save_experiment_run(
     target_column,
     dataset_rows,
     feature_count,
-    model_records
+    model_records,
+    dataset_fingerprint
 ):
 
     if not model_records:
@@ -105,53 +143,55 @@ def save_experiment_run(
             allow_nan=False
         )
 
-        records_to_insert.append((
+    records_to_insert.append((
 
-            run_id,
-            created_at,
+        run_id,
+        created_at,
 
-            problem_type,
-            target_column,
+        problem_type,
+        target_column,
 
-            dataset_rows,
-            feature_count,
+        dataset_rows,
+        feature_count,
+        dataset_fingerprint,
 
-            record["model_name"],
+        record["model_name"],
+        metrics_json,
 
-            metrics_json,
+        record.get("rank"),
+        record.get("diagnosis"),
+        record.get("optimization_status")
 
-            record.get("rank"),
-            record.get("diagnosis"),
-            record.get("optimization_status")
-
-        ))
+    ))
 
     with sqlite3.connect(DB_PATH) as connection:
 
         connection.executemany("""
 
-            INSERT INTO model_experiments (
+           INSERT INTO model_experiments (
 
-                run_id,
-                created_at,
+    run_id,
+    created_at,
 
-                problem_type,
-                target_column,
+    problem_type,
+    target_column,
 
-                dataset_rows,
-                feature_count,
+    dataset_rows,
+    feature_count,
+    dataset_fingerprint,
 
-                model_name,
+    model_name,
+    metrics_json,
 
-                metrics_json,
+    model_rank,
+    diagnosis,
+    optimization_status
 
-                model_rank,
-                diagnosis,
-                optimization_status
+)
 
-            )
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            
 
         """, records_to_insert)
 
