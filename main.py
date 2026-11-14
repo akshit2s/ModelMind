@@ -11,6 +11,7 @@ from core.model_selector import get_candidate_models
 from core.preprocessor import build_preprocessor
 from core.trainer import train_models
 from core.evaluator import evaluate_models
+from core.model_comparator import rank_models
 
 
 # ==========================================
@@ -80,9 +81,20 @@ def main():
 
         target_column = input("\nEnter target column: ")
 
-        problem_type = detect_problem_type(df, target_column)
+        # Get the automatic suggestion
+        suggested_type = detect_problem_type(df, target_column)
 
-        print(f"\nDetected problem: {problem_type.upper()}")
+        print(f"\nSuggested problem type: {suggested_type.upper()}")
+
+        # Ask the user to confirm the actual prediction objective
+        problem_type = input(
+            "\nChoose problem type (classification/regression): "
+        ).strip().lower()
+
+        if problem_type not in ["classification", "regression"]:
+            raise ValueError("Please enter classification or regression.")
+
+        print(f"\nSelected problem: {problem_type.upper()}")
 
         # ----------------------------------
         # 4. FEATURE-TARGET SEPARATION
@@ -152,6 +164,15 @@ def main():
         print("       MODEL TRAINING COMPLETED")
         print("======================================")
 
+        print("\n========== EVALUATION DEBUG ==========")
+
+        print("Actual test values:", y_test.tolist())
+
+        for model_name, model in trained_models.items():
+
+            predictions = model.predict(X_test)
+
+            print(f"{model_name}: {predictions.tolist()}")
         # ----------------------------------
         # 9. MODEL EVALUATION
         # ----------------------------------
@@ -181,6 +202,43 @@ def main():
 
             print(f"\n[EVALUATION FAILED] {model_name}")
             print(f"Reason: {error}")
+
+        # ----------------------------------
+        # 10. MODEL COMPARISON AND RANKING
+        # ----------------------------------
+
+        ranked_results, unranked_models, ranking_metric = rank_models(
+            evaluation_results,
+            problem_type
+        )
+
+        print("\n========== MODEL RANKING ==========")
+
+        print(f"Ranking metric: {ranking_metric.upper()}")
+
+        if ranked_results:
+
+            for position, result in enumerate(ranked_results, start=1):
+
+                print(f"\nRank {position}: {result['model_name']}")
+
+                print(
+                    f"{ranking_metric}: {result['metric_value']:.4f}"
+                )
+
+            print("\nTOP CANDIDATE:")
+
+            print(ranked_results[0]["model_name"])
+
+        else:
+            print("No models could be ranked.")
+
+        if unranked_models:
+
+            print("\n========== UNRANKED MODELS ==========")
+
+            for model_name in unranked_models:
+                print(model_name)
 
     except (FileNotFoundError, ValueError, TypeError) as error:
 

@@ -1,21 +1,58 @@
-# Virtual environment
-venv/
-env/
+# ==============================
+# PYTHON ENVIRONMENT
+# ==============================
 
-# Python cache
+venv/
+.venv/
+env/
 __pycache__/
 *.py[cod]
 
-# Environment variables and secrets
+# ==============================
+# ENVIRONMENT VARIABLES / SECRETS
+# ==============================
+
 .env
+.env.*
+!.env.example
 
-# IDE settings
-.vscode/
+# Credentials and private keys
+*.pem
+*.key
+*.p12
+*.pfx
 
-# Generated reports
+# ==============================
+# LOCAL DATASETS
+# ==============================
+
+# Never track datasets by default
+datasets/*
+
+# Keep the datasets directory in Git
+!datasets/.gitkeep
+
+# Ignore common data files everywhere
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.jsonl
+*.sqlite
+*.db
+
+# ==============================
+# GENERATED REPORTS
+# ==============================
+
 reports/*
 !reports/.gitkeep
 
-# OS files
+# ==============================
+# EDITOR / SYSTEM FILES
+# ==============================
+
+.vscode/
 .DS_Store
 Thumbs.db
