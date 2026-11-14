@@ -1,5 +1,10 @@
 from core.dataset_loader import load_dataset
 from core.data_analyzer import analyze_dataset
+from core.problem_detector import detect_problem_type
+from core.data_preparer import separate_features_target
+from core.data_splitter import split_dataset
+
+
 
 
 def main():
@@ -31,6 +36,31 @@ def main():
 
         for column, dtype in analysis["data_types"].items():
             print(f"{column}: {dtype}")
+        target_column = input("\nEnter target column: ")
+        X, y = separate_features_target(df, target_column)
+
+        print("\n========== FEATURE-TARGET SEPARATION ==========")
+        print("Features (X):")
+        print(X.head())
+
+        print("\nTarget (y):")
+        print(y.head())
+
+        print(f"\nNumber of features: {X.shape[1]}")
+        print(f"Number of records: {X.shape[0]}")
+
+        X_train, X_test, y_train, y_test = split_dataset(X, y)
+
+        print("\n========== TRAIN-TEST SPLIT ==========")
+
+        print(f"Training records: {len(X_train)}")
+        print(f"Testing records: {len(X_test)}")
+
+        print(f"X_train shape: {X_train.shape}")
+        print(f"X_test shape: {X_test.shape}")
+
+        print(f"y_train shape: {y_train.shape}")
+        print(f"y_test shape: {y_test.shape}")
 
         print("\n========== MISSING VALUES ==========")
 
@@ -51,6 +81,11 @@ def main():
         print("\n========== NUMERICAL CORRELATION ==========")
 
         print(analysis["numerical_correlation"])
+
+        problem_type = detect_problem_type(df, target_column)
+
+        print(f"\nDetected problem: {problem_type.upper()}")
+
 
     except (FileNotFoundError, ValueError, TypeError) as e:
 
