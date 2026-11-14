@@ -1,6 +1,8 @@
+import pandas as pd
+
+
 def detect_problem_type(df, target_column):
 
-    # Check whether target column exists
     if target_column not in df.columns:
         raise ValueError(
             f"Target column '{target_column}' not found."
@@ -8,14 +10,25 @@ def detect_problem_type(df, target_column):
 
     target = df[target_column]
 
-    # Check target data type
-    if target.dtype == "object" or target.dtype.name == "category":
+    if target.isna().all():
+        raise ValueError("Target column contains only missing values.")
+
+    # Boolean and categorical targets suggest classification
+    if (
+        pd.api.types.is_bool_dtype(target)
+        or isinstance(target.dtype, pd.CategoricalDtype)
+        or pd.api.types.is_object_dtype(target)
+    ):
         return "classification"
 
-    # Check number of unique values
-    unique_values = target.nunique()
+    # Numeric targets with few unique values are ambiguous
+    if pd.api.types.is_numeric_dtype(target):
 
-    if unique_values <= 20:
-        return "classification"
+        unique_values = target.nunique()
 
-    return "regression"
+        if unique_values <= 20:
+            return "ambiguous"
+
+        return "regression"
+
+    return "ambiguous"

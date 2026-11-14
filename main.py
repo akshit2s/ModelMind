@@ -13,6 +13,8 @@ from core.trainer import train_models
 from core.evaluator import evaluate_models
 from core.model_comparator import rank_models
 from core.diagnostics import diagnose_models
+from core.optimizer import generate_optimization_plan
+from core.optimization_runner import optimize_model
 
 
 # ==========================================
@@ -277,6 +279,91 @@ def main():
 
             print(f"\n[DIAGNOSTIC FAILED] {model_name}")
             print(f"Reason: {error}")
+
+        # ----------------------------------
+        # 12. OPTIMIZATION RECOMMENDATIONS
+        # ----------------------------------
+
+        optimization_plans = generate_optimization_plan(
+            diagnostic_results
+        )
+
+        print("\n========== OPTIMIZATION PLANS ==========")
+
+        for model_name, plan in optimization_plans.items():
+
+            print(f"\nModel: {model_name}")
+            print(f"Diagnosis: {plan['diagnosis']}")
+            print(f"Status: {plan['status']}")
+
+            print("Recommendations:")
+
+            for recommendation in plan["recommendations"]:
+                print(f"- {recommendation}")
+
+            print(
+                f"User approval required: {plan['requires_approval']}"
+            )
+
+        # ----------------------------------
+        # 13. USER-APPROVED OPTIMIZATION
+        # ----------------------------------
+
+        if ranked_results:
+
+            top_model_name = ranked_results[0]["model_name"]
+
+            print("\n========== OPTIMIZATION APPROVAL ==========")
+
+            print(f"Top candidate: {top_model_name}")
+
+            approval = input(
+                "\nDo you approve hyperparameter optimization? (yes/no): "
+            ).strip().lower()
+
+            if approval == "yes":
+
+                result = optimize_model(
+                    top_model_name,
+                    trained_models[top_model_name],
+                    X_train,
+                    y_train,
+                    problem_type
+                )
+
+                print("\n========== OPTIMIZATION RESULTS ==========")
+
+                print(f"Status: {result['status']}")
+                print(result["message"])
+
+                if result["status"] == "SUCCESS":
+
+                    optimized_model = result["best_estimator"]
+
+                    print("\nBest parameters:")
+
+                    for parameter, value in result["best_params"].items():
+                        print(f"{parameter}: {value}")
+
+                    print(f"\nCross-validation score: {result['cv_score']:.4f}")
+
+                    # Evaluate the optimized model on the untouched test set
+                    optimized_results, optimized_failures = evaluate_models(
+                        {top_model_name: optimized_model},
+                        X_test,
+                        y_test,
+                        problem_type
+                    )
+
+                    print("\nOptimized model test performance:")
+
+                    print(optimized_results)
+
+                    for model_name, error in optimized_failures.items():
+                        print(f"[FAILED] {model_name}: {error}")
+
+            else:
+                print("\nOptimization skipped. Original models remain unchanged.")
 
     except (FileNotFoundError, ValueError, TypeError) as error:
 
