@@ -9,63 +9,27 @@ from agent.prompts import MODELMIND_SYSTEM_INSTRUCTION
 from agent.tools import create_tool_registry
 
 
-def run_agent(df, user_prompt, max_tool_calls=3):
+def create_agent_session(df, max_tool_calls=5):
 
-    # ----------------------------------
-    # 1. VALIDATE INPUTS
-    # ----------------------------------
-
-    if not isinstance(user_prompt, str) or not user_prompt.strip():
-        raise ValueError("User prompt cannot be empty.")
-
-    if not isinstance(max_tool_calls, int) or max_tool_calls < 1:
-        raise ValueError("Maximum tool calls must be at least 1.")
-
-    # ----------------------------------
-    # 2. CREATE TOOL REGISTRY
-    # ----------------------------------
-
+    # Create Python tool registry
     tool_registry = create_tool_registry(df)
 
     # ----------------------------------
-    # 3. DEFINE PERMITTED PYTHON TOOLS
+    # DEFINE AVAILABLE TOOLS
     # ----------------------------------
 
     def inspect_dataset() -> dict:
-        """
-        Inspect the loaded dataset.
+        """Inspect dataset structure and statistics."""
 
-        Returns:
-            Dataset dimensions, column names, data types,
-            missing-value counts, unique-value counts
-            and duplicate-row count.
-
-        Does not return actual dataset records.
-        """
-
-        print(
-            "[TOOL] Executing inspect_dataset...",
-            flush=True
-        )
+        print("\n[TOOL] Executing inspect_dataset...", flush=True)
 
         return tool_registry["inspect_dataset"]()
 
     def inspect_column(column_name: str) -> dict:
-        """
-        Inspect a specific dataset column.
-
-        Args:
-            column_name: Name of the column to inspect.
-
-        Returns:
-            Column data type, category, missing-value count,
-            unique-value count and total records.
-
-        Does not return actual column values.
-        """
+        """Inspect a specific dataset column."""
 
         print(
-            f"[TOOL] Executing inspect_column: {column_name}",
+            f"\n[TOOL] Executing inspect_column: {column_name}",
             flush=True
         )
 
@@ -73,55 +37,48 @@ def run_agent(df, user_prompt, max_tool_calls=3):
             column_name=column_name
         )
 
-    # Only these two functions are exposed to Gemini.
     available_tools = [
         inspect_dataset,
         inspect_column
     ]
 
     # ----------------------------------
-    # 4. CREATE GEMINI CLIENT
-    # ----------------------------------
-
-    client = create_gemini_client()
-
-    # ----------------------------------
-    # 5. EXTEND SYSTEM INSTRUCTIONS
+    # SYSTEM INSTRUCTIONS
     # ----------------------------------
 
     system_instruction = (
         MODELMIND_SYSTEM_INSTRUCTION
         + """
 
-        TOOL USAGE RULES:
+        CONVERSATION RULES:
 
-        1. Use inspect_dataset when the user asks
-           about the overall dataset.
+        1. Remember previous messages in the current conversation.
 
-        2. Use inspect_column when the user asks
-           about a specific column.
+        2. Understand references such as "it",
+           "that column" and "previous result".
 
-        3. Base dataset-related factual statements
-           only on actual tool results.
+        3. Use previous tool results when relevant.
 
         4. Never invent dataset statistics.
 
         5. Never expose actual dataset records.
 
-        6. Never claim to have trained or modified
-           a model unless the corresponding Python
-           operation was actually executed.
+        6. Available tools are read-only.
 
-        7. If a requested operation is unavailable,
-           explain this limitation honestly.
-
-        8. The available tools are read-only.
+        7. Never claim to have trained or modified
+           a model unless the operation was executed.
 
         """
     )
 
     # ----------------------------------
-    # 6. CONFIGURE THE AGENT
+    # CREATE CLIENT
+    # ----------------------------------
+
+    client = create_gemini_client()
+
+    # ----------------------------------
+    # CONFIGURE CHAT
     # ----------------------------------
 
     config = types.GenerateContentConfig(
@@ -140,41 +97,38 @@ def run_agent(df, user_prompt, max_tool_calls=3):
 
     )
 
-    # ----------------------------------
-    # 7. SEND REQUEST TO GEMINI
-    # ----------------------------------
-
-    print(
-        "\n[AGENT] Sending request to Gemini...",
-        flush=True
+    chat = client.chats.create(
+        model=MODEL_NAME,
+        config=config
     )
+
+    # IMPORTANT:
+    # Return BOTH objects so the client remains alive.
+    return {
+        "client": client,
+        "chat": chat
+    }
+
+
+def run_agent(session, user_prompt):
+
+    if not isinstance(user_prompt, str) or not user_prompt.strip():
+        raise ValueError("Prompt cannot be empty.")
+
+    # Retain a reference to the client during the request.
+    client = session["client"]
+    chat = session["chat"]
+
+    print("\n[AGENT] Processing your request...", flush=True)
 
     try:
 
-        response = client.models.generate_content(
-
-            model=MODEL_NAME,
-
-            contents=user_prompt,
-
-            config=config
-
-        )
-
-        # ----------------------------------
-        # 8. RETURN FINAL RESPONSE
-        # ----------------------------------
+        response = chat.send_message(user_prompt)
 
         if not response.text:
+            raise RuntimeError("Gemini returned an empty response.")
 
-            raise RuntimeError(
-                "Gemini returned an empty response."
-            )
-
-        print(
-            "[AGENT] Response received successfully!",
-            flush=True
-        )
+        print("[AGENT] Response received!", flush=True)
 
         return response.text.strip()
 
@@ -183,3 +137,12 @@ def run_agent(df, user_prompt, max_tool_calls=3):
         raise RuntimeError(
             f"Agent execution failed: {type(error).__name__}: {error}"
         ) from error
+
+
+def close_agent_session(session):
+
+    if session and "client" in session:
+
+        session["client"].close()
+
+        print("\n[AGENT] Session closed successfully.")
