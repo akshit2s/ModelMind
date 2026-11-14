@@ -338,30 +338,67 @@ def main():
 
                 if result["status"] == "SUCCESS":
 
-                    optimized_model = result["best_estimator"]
+                    metric_name = (
+                        "Weighted F1"
+                        if problem_type == "classification"
+                        else "RMSE"
+                    )
 
-                    print("\nBest parameters:")
+                    print("\n========== OPTIMIZATION COMPARISON ==========")
 
-                    for parameter, value in result["best_params"].items():
-                        print(f"{parameter}: {value}")
+                    print(
+                        f"Original CV score: "
+                        f"{result['baseline_cv_score']:.4f}"
+                    )
 
-                    print(f"\nCross-validation score: {result['cv_score']:.4f}")
+                    print(
+                        f"Optimized CV score: "
+                        f"{result['optimized_cv_score']:.4f}"
+                    )
 
-                    # Evaluate the optimized model on the untouched test set
-                    optimized_results, optimized_failures = evaluate_models(
-                        {top_model_name: optimized_model},
+                    print(
+                        f"Improvement: "
+                        f"{result['improvement']:.4f}"
+                    )
+
+                    if result["improved"]:
+
+                        print("\n[+] Optimization improved cross-validation performance.")
+
+                        selected_model = result["best_estimator"]
+
+                        print("\nBest parameters:")
+
+                        for parameter, value in result["best_params"].items():
+                            print(f"{parameter}: {value}")
+
+                    else:
+
+                        print("\n[-] Optimization did not improve cross-validation performance.")
+
+                        print("Retaining the original model.")
+
+                        selected_model = trained_models[top_model_name]
+
+                    # Final evaluation of the selected model
+                    final_results, final_failures = evaluate_models(
+                        {top_model_name: selected_model},
                         X_test,
                         y_test,
                         problem_type
                     )
 
-                    print("\nOptimized model test performance:")
+                    print("\n========== FINAL SELECTED MODEL ==========")
 
-                    print(optimized_results)
+                    for model_name, metrics in final_results.items():
 
-                    for model_name, error in optimized_failures.items():
+                        print(f"\nModel: {model_name}")
+
+                        for metric, value in metrics.items():
+                            print(f"{metric}: {value}")
+
+                    for model_name, error in final_failures.items():
                         print(f"[FAILED] {model_name}: {error}")
-
             else:
                 print("\nOptimization skipped. Original models remain unchanged.")
 

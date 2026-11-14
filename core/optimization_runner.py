@@ -1,6 +1,9 @@
-from sklearn.model_selection import GridSearchCV, KFold, StratifiedKFold
-
-
+from sklearn.model_selection import (
+    GridSearchCV,
+    KFold,
+    StratifiedKFold,
+    cross_val_score
+)
 def optimize_model(
     model_name,
     trained_model,
@@ -118,7 +121,17 @@ def optimize_model(
 
     else:
         raise ValueError("Invalid problem type.")
+    # Evaluate the original model using cross-validation
+    baseline_scores = cross_val_score(
+        estimator=trained_model,
+        X=X_train,
+        y=y_train,
+        scoring=scoring,
+        cv=cv,
+        n_jobs=-1
+    )
 
+    baseline_cv_score = float(baseline_scores.mean())
     # Run hyperparameter search
     search = GridSearchCV(
         estimator=trained_model,
@@ -130,16 +143,41 @@ def optimize_model(
     )
 
     search.fit(X_train, y_train)
+    
+    optimized_cv_score = float(search.best_score_)
 
-    best_cv_score = search.best_score_
+    # Convert negative RMSE into normal positive RMSE
+    if problem_type == "regression":
+        baseline_cv_score = -baseline_cv_score
+        optimized_cv_score = -optimized_cv_score
+
+
+    # Determine whether optimization improved performance
+    if problem_type == "classification":
+
+        improvement = optimized_cv_score - baseline_cv_score
+
+        improved = improvement > 0.000001
+
+    else:
+
+        improvement = baseline_cv_score - optimized_cv_score
+
+        improved = improvement > 0.000001
 
     if problem_type == "regression":
         best_cv_score = -best_cv_score
 
     return {
-        "status": "SUCCESS",
-        "best_estimator": search.best_estimator_,
-        "best_params": search.best_params_,
-        "cv_score": best_cv_score,
-        "message": "Hyperparameter optimization completed."
-    }
+    "status": "SUCCESS",
+    "best_estimator": search.best_estimator_,
+    "best_params": search.best_params_,
+
+    "baseline_cv_score": baseline_cv_score,
+    "optimized_cv_score": optimized_cv_score,
+
+    "improvement": improvement,
+    "improved": improved,
+
+    "message": "Hyperparameter optimization completed."
+}
