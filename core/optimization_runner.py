@@ -4,6 +4,8 @@ from sklearn.model_selection import (
     StratifiedKFold,
     cross_val_score
 )
+
+
 def optimize_model(
     model_name,
     trained_model,
@@ -12,18 +14,26 @@ def optimize_model(
     problem_type
 ):
 
-    # Guard against insufficient data
+    # ==================================
+    # 1. VALIDATION
+    # ==================================
+
+    if problem_type not in ["classification", "regression"]:
+        raise ValueError("Unsupported problem type.")
+
+    if len(X_train) != len(y_train):
+        raise ValueError("Training features and target lengths differ.")
+
     if len(X_train) < 30:
         return {
             "status": "INCONCLUSIVE",
-            "message": (
-                "Insufficient training records for reliable "
-                "hyperparameter optimization. At least 30 "
-                "training records are required by the current safeguard."
-            )
+            "message": "Insufficient training records for reliable optimization."
         }
 
-    # Define hyperparameter search spaces
+    # ==================================
+    # 2. HYPERPARAMETER SEARCH SPACES
+    # ==================================
+
     parameter_grids = {
 
         "Logistic Regression": {
@@ -53,44 +63,56 @@ def optimize_model(
         }
     }
 
-    # Support Vector models have separate search spaces
+    # Support Vector Models
     if model_name in [
         "Support Vector Machine",
         "Support Vector Regression"
     ]:
 
         parameter_grid = [
+
             {
                 "model__C": [0.1, 1, 10],
                 "model__kernel": ["linear"]
             },
+
             {
                 "model__C": [0.1, 1, 10],
                 "model__kernel": ["rbf"],
                 "model__gamma": ["scale", "auto"]
             }
+
         ]
 
     else:
+
         parameter_grid = parameter_grids.get(model_name)
 
     if parameter_grid is None:
+
         return {
             "status": "UNSUPPORTED",
-            "message": "No optimization search space is defined for this model."
+            "message": f"No optimization configuration for {model_name}."
         }
 
-    # Configure cross-validation
+    # ==================================
+    # 3. CROSS-VALIDATION CONFIGURATION
+    # ==================================
+
     if problem_type == "classification":
 
         class_counts = y_train.value_counts()
 
-        cv_splits = min(5, int(class_counts.min()))
+        cv_splits = min(
+            5,
+            int(class_counts.min())
+        )
 
         if cv_splits < 3:
+
             return {
                 "status": "INCONCLUSIVE",
-                "message": "Insufficient examples in one or more classes for cross-validation."
+                "message": "Insufficient examples per class for cross-validation."
             }
 
         cv = StratifiedKFold(
@@ -101,11 +123,12 @@ def optimize_model(
 
         scoring = "f1_weighted"
 
-    elif problem_type == "regression":
+    else:
 
         cv_splits = min(5, len(X_train))
 
         if cv_splits < 3:
+
             return {
                 "status": "INCONCLUSIVE",
                 "message": "Insufficient records for cross-validation."
@@ -119,9 +142,10 @@ def optimize_model(
 
         scoring = "neg_root_mean_squared_error"
 
-    else:
-        raise ValueError("Invalid problem type.")
-    # Evaluate the original model using cross-validation
+    # ==================================
+    # 4. EVALUATE ORIGINAL MODEL
+    # ==================================
+
     baseline_scores = cross_val_score(
         estimator=trained_model,
         X=X_train,
@@ -132,7 +156,11 @@ def optimize_model(
     )
 
     baseline_cv_score = float(baseline_scores.mean())
-    # Run hyperparameter search
+
+    # ==================================
+    # 5. RUN GRID SEARCH
+    # ==================================
+
     search = GridSearchCV(
         estimator=trained_model,
         param_grid=parameter_grid,
@@ -143,41 +171,58 @@ def optimize_model(
     )
 
     search.fit(X_train, y_train)
-    
+
+    # ==================================
+    # 6. EXTRACT OPTIMIZED SCORE
+    # ==================================
+
     optimized_cv_score = float(search.best_score_)
 
-    # Convert negative RMSE into normal positive RMSE
+    # Convert negative RMSE into positive RMSE
     if problem_type == "regression":
+
         baseline_cv_score = -baseline_cv_score
+
         optimized_cv_score = -optimized_cv_score
 
+    # ==================================
+    # 7. CALCULATE IMPROVEMENT
+    # ==================================
 
-    # Determine whether optimization improved performance
     if problem_type == "classification":
 
-        improvement = optimized_cv_score - baseline_cv_score
-
-        improved = improvement > 0.000001
+        improvement = (
+            optimized_cv_score - baseline_cv_score
+        )
 
     else:
 
-        improvement = baseline_cv_score - optimized_cv_score
+        improvement = (
+            baseline_cv_score - optimized_cv_score
+        )
 
-        improved = improvement > 0.000001
+    improved = improvement > 0.000001
 
-    if problem_type == "regression":
-        best_cv_score = -best_cv_score
+    # ==================================
+    # 8. RETURN OPTIMIZATION RESULTS
+    # ==================================
 
     return {
-    "status": "SUCCESS",
-    "best_estimator": search.best_estimator_,
-    "best_params": search.best_params_,
 
-    "baseline_cv_score": baseline_cv_score,
-    "optimized_cv_score": optimized_cv_score,
+        "status": "SUCCESS",
 
-    "improvement": improvement,
-    "improved": improved,
+        "best_estimator": search.best_estimator_,
 
-    "message": "Hyperparameter optimization completed."
-}
+        "best_params": search.best_params_,
+
+        "baseline_cv_score": baseline_cv_score,
+
+        "optimized_cv_score": optimized_cv_score,
+
+        "improvement": improvement,
+
+        "improved": improved,
+
+        "message": "Hyperparameter optimization completed."
+
+    }
