@@ -146,6 +146,25 @@ def create_agent_session(df, max_tool_calls=5):
 
         20. Never access secrets or API credentials.
 
+        EXPERIMENT TRACKING RULES:
+
+        21. Use get_experiment_history when the user asks
+            about previous experiments.
+
+        22. Use compare_current_dataset_runs when the user
+            requests comparison of previous runs.
+
+        23. Only compare experiments matching the current
+            dataset fingerprint and prediction objective.
+
+        24. Use get_saved_optimization_history when the user
+            asks about previous optimization attempts.
+
+        25. Report saved metrics exactly as retrieved.
+            Never invent historical results.
+
+        26. Explain when no matching experiment history exists.
+
         """
     )
 
@@ -153,11 +172,55 @@ def create_agent_session(df, max_tool_calls=5):
     # GEMINI TOOL CONFIGURATION
     # ==================================
 
+        # ==================================
+    # TOOL 5: EXPERIMENT HISTORY
+    # ==================================
+
+    def get_experiment_history(limit: int = 5) -> dict:
+        """Retrieve recent saved ML experiments."""
+
+        return tool_registry["get_experiment_history"](
+            limit=limit
+        )
+
+    # ==================================
+    # TOOL 6: EXPERIMENT COMPARISON
+    # ==================================
+
+    def compare_current_dataset_runs(
+        problem_type: str,
+        target_column: str,
+        primary_metric: str = None
+    ) -> dict:
+        """Compare previous runs on the current dataset."""
+
+        return tool_registry["compare_current_dataset_runs"](
+            problem_type=problem_type,
+            target_column=target_column,
+            primary_metric=primary_metric
+        )
+
+    # ==================================
+    # TOOL 7: OPTIMIZATION HISTORY
+    # ==================================
+
+    def get_saved_optimization_history(
+        run_id: str = None
+    ) -> dict:
+        """Retrieve saved optimization attempts."""
+
+        return tool_registry["get_saved_optimization_history"](
+            run_id=run_id
+        )
+
     available_tools = [
         inspect_dataset,
         inspect_column,
         run_model_analysis,
-        prepare_optimization
+        prepare_optimization,
+        get_experiment_history,
+        compare_current_dataset_runs,
+        get_saved_optimization_history
     ]
 
     config = types.GenerateContentConfig(

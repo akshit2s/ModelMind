@@ -507,7 +507,114 @@ def create_tool_registry(df):
                 "No changes have been made to the model. "
                 "Explicit user approval is required."
             )
+    
+        }
+        # ==================================
+    # TOOL 5: RECENT EXPERIMENT HISTORY
+    # ==================================
 
+    def get_experiment_history(limit: int = 5) -> dict:
+        """
+        Retrieve recent ModelMind experiment records.
+
+        Returns experiment metadata and evaluation metrics.
+        Does not expose dataset records.
+        """
+
+        from core.experiment_tracker import get_recent_experiments
+
+        if not isinstance(limit, int) or isinstance(limit, bool):
+            raise ValueError("Limit must be an integer.")
+
+        if not 1 <= limit <= 50:
+            raise ValueError("Limit must be between 1 and 50.")
+
+        experiments = get_recent_experiments(limit=limit)
+
+        return {
+            "status": "SUCCESS",
+            "count": len(experiments),
+            "experiments": experiments
+        }
+
+    # ==================================
+    # TOOL 6: COMPARE PREVIOUS EXPERIMENTS
+    # ==================================
+
+    def compare_current_dataset_runs(
+        problem_type: str,
+        target_column: str,
+        primary_metric: str = None
+    ) -> dict:
+        """
+        Compare previous experiment runs performed
+        on the currently loaded dataset.
+
+        Only matching datasets and objectives are compared.
+        """
+
+        from core.experiment_tracker import create_dataset_fingerprint
+
+        from core.experiment_comparator import (
+            compare_experiment_runs
+        )
+
+        problem_type = problem_type.strip().lower()
+
+        if problem_type not in ["classification", "regression"]:
+            raise ValueError("Invalid problem type.")
+
+        if target_column not in df.columns:
+            raise ValueError(
+                f"Target column '{target_column}' not found."
+            )
+
+        fingerprint = create_dataset_fingerprint(df)
+
+        results = compare_experiment_runs(
+            problem_type=problem_type,
+            target_column=target_column,
+            dataset_fingerprint=fingerprint,
+            primary_metric=primary_metric
+        )
+
+        return {
+            "status": "SUCCESS",
+            "target_column": target_column,
+            "problem_type": problem_type,
+            "comparison_metric": (
+                primary_metric
+                or (
+                    "f1_score"
+                    if problem_type == "classification"
+                    else "rmse"
+                )
+            ),
+            "matching_runs": len(results),
+            "results": results
+        }
+
+    # ==================================
+    # TOOL 7: OPTIMIZATION HISTORY
+    # ==================================
+
+    def get_saved_optimization_history(run_id: str = None) -> dict:
+        """
+        Retrieve previously saved optimization results.
+
+        Optionally filters by experiment run ID.
+        """
+
+        from core.optimization_history import (
+            get_optimization_history
+        )
+
+        history = get_optimization_history(run_id=run_id)
+
+        return {
+            "status": "SUCCESS",
+            "count": len(history),
+            "optimization_history": history
         }
             # ==================================
             # EXECUTE APPROVED OPTIMIZATION
@@ -707,7 +814,11 @@ def create_tool_registry(df):
     "run_model_analysis": run_model_analysis,
     "prepare_optimization": prepare_optimization,
 
-    # Internal functions and state
+    "get_experiment_history": get_experiment_history,
+    "compare_current_dataset_runs": compare_current_dataset_runs,
+    "get_saved_optimization_history": get_saved_optimization_history,
+
     "execute_approved_optimization": execute_approved_optimization,
+
     "_state": run_state
 }
