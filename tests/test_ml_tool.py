@@ -10,14 +10,14 @@ def main():
 
     print("\n========== MODELMIND ML TOOL TEST ==========")
 
+    # STEP 1: Run ML analysis
     result = tools["run_model_analysis"](
         target_column="Marks",
         problem_type="regression"
     )
 
     print("\nAnalysis Status:", result["status"])
-
-    print("\nRanking Metric:", result.get("ranking_metric"))
+    print("Ranking Metric:", result.get("ranking_metric"))
 
     print("\nRanked Models:")
 
@@ -36,6 +36,22 @@ def main():
             model["model_name"],
             model["diagnosis"].get("diagnosis")
         )
+
+    # STEP 2: Prepare optimization
+    if result["status"] == "SUCCESS" and result["ranked_models"]:
+
+        top_model = result["ranked_models"][0]["model_name"]
+
+        print("\n========== OPTIMIZATION PLAN TEST ==========")
+
+        print("Selected model:", top_model)
+
+        plan = tools["prepare_optimization"](
+            model_name=top_model
+        )
+
+        print("\nOptimization Plan:")
+        print(plan)
 
 
 if __name__ == "__main__":

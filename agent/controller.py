@@ -14,16 +14,20 @@ def create_agent_session(df, max_tool_calls=5):
     # Create Python tool registry
     tool_registry = create_tool_registry(df)
 
-    # ----------------------------------
-    # DEFINE AVAILABLE TOOLS
-    # ----------------------------------
+    # ==================================
+    # TOOL 1: DATASET INSPECTION
+    # ==================================
 
     def inspect_dataset() -> dict:
-        """Inspect dataset structure and statistics."""
+        """Inspect the loaded dataset."""
 
         print("\n[TOOL] Executing inspect_dataset...", flush=True)
 
         return tool_registry["inspect_dataset"]()
+
+    # ==================================
+    # TOOL 2: COLUMN INSPECTION
+    # ==================================
 
     def inspect_column(column_name: str) -> dict:
         """Inspect a specific dataset column."""
@@ -37,17 +41,17 @@ def create_agent_session(df, max_tool_calls=5):
             column_name=column_name
         )
 
+    # ==================================
+    # TOOL 3: COMPLETE ML ANALYSIS
+    # ==================================
+
     def run_model_analysis(
         target_column: str,
         problem_type: str
     ) -> dict:
         """
-        Execute the complete ML workflow.
-
-        Requires the target column and prediction problem type.
-
-        Runs model selection, preprocessing, training,
-        evaluation, ranking and diagnostics.
+        Run model selection, training, evaluation,
+        ranking and diagnostics.
         """
 
         print("\n[TOOL] Starting ML analysis...", flush=True)
@@ -60,52 +64,101 @@ def create_agent_session(df, max_tool_calls=5):
         print("[TOOL] ML analysis completed.", flush=True)
 
         return result
+
+    # ==================================
+    # TOOL 4: OPTIMIZATION PLAN
+    # ==================================
+
+    def prepare_optimization(model_name: str) -> dict:
+        """
+        Generate optimization recommendations.
+        Does not modify or retrain any model.
+        """
+
+        print(
+            f"\n[TOOL] Preparing optimization for {model_name}...",
+            flush=True
+        )
+
+        return tool_registry["prepare_optimization"](
+            model_name=model_name
+        )
+
+    # ==================================
+    # SYSTEM INSTRUCTIONS
+    # ==================================
+
+    system_instruction = (
+        MODELMIND_SYSTEM_INSTRUCTION
+        + """
+
+        CONVERSATION RULES:
+
+        1. Remember previous messages.
+        2. Understand references to previous results.
+        3. Never invent dataset statistics or model metrics.
+        4. Never expose actual dataset records.
+        5. Report actual results returned by Python.
+
+        ML ANALYSIS RULES:
+
+        6. Use run_model_analysis when the user
+           explicitly requests model training or evaluation.
+
+        7. Determine classification or regression
+           from the actual prediction objective.
+
+        8. Ensure the target column and problem type
+           are clear before running analysis.
+
+        9. Explain when dataset size makes evaluation
+           unreliable.
+
+        OPTIMIZATION RULES:
+
+        10. Use prepare_optimization when the user
+            requests optimization recommendations.
+
+        11. Use results from the latest ML analysis.
+
+        12. If the user asks to optimize the best model,
+            select the highest-ranked model from actual results.
+
+        13. Explain optimization recommendations.
+
+        14. Always ask for explicit user approval
+            before applying changes.
+
+        15. prepare_optimization only generates a plan.
+            It does not modify or retrain models.
+
+        16. If optimization is deferred because of
+            insufficient data, explain why.
+
+        17. Never claim optimization was applied
+            unless the Python operation actually occurred.
+
+        SECURITY RULES:
+
+        18. Never execute arbitrary generated Python code.
+
+        19. Only use registered Python tools.
+
+        20. Never access secrets or API credentials.
+
+        """
+    )
+
+    # ==================================
+    # GEMINI TOOL CONFIGURATION
+    # ==================================
+
     available_tools = [
         inspect_dataset,
         inspect_column,
-        run_model_analysis
+        run_model_analysis,
+        prepare_optimization
     ]
-
-    # ----------------------------------
-    # SYSTEM INSTRUCTIONS
-    # ----------------------------------
-
-    system_instruction = (
-    MODELMIND_SYSTEM_INSTRUCTION
-    + """
-
-    ML ANALYSIS RULES:
-
-1. Use run_model_analysis when the user explicitly
-   requests model training, evaluation or comparison.
-
-2. Identify the target column from the user's objective.
-
-3. Determine classification or regression from the
-   actual prediction objective.
-
-4. Never infer the problem type solely from unique values.
-
-5. Do not execute ML analysis until the target column
-   and problem type are clear.
-
-6. Report actual evaluation results returned by Python.
-
-7. Clearly explain when the dataset is too small
-   for reliable evaluation.
-
-8. Never invent model performance metrics.
-    """
-)
-    # ----------------------------------
-    # CREATE CLIENT
-    # ----------------------------------
-
-    client = create_gemini_client()
-
-    # ----------------------------------
-    # CONFIGURE CHAT
-    # ----------------------------------
 
     config = types.GenerateContentConfig(
 
@@ -123,13 +176,17 @@ def create_agent_session(df, max_tool_calls=5):
 
     )
 
+    # ==================================
+    # CREATE CLIENT AND CHAT SESSION
+    # ==================================
+
+    client = create_gemini_client()
+
     chat = client.chats.create(
         model=MODEL_NAME,
         config=config
     )
 
-    # IMPORTANT:
-    # Return BOTH objects so the client remains alive.
     return {
         "client": client,
         "chat": chat
@@ -141,8 +198,9 @@ def run_agent(session, user_prompt):
     if not isinstance(user_prompt, str) or not user_prompt.strip():
         raise ValueError("Prompt cannot be empty.")
 
-    # Retain a reference to the client during the request.
+    # Keep client alive throughout the session
     client = session["client"]
+
     chat = session["chat"]
 
     print("\n[AGENT] Processing your request...", flush=True)
@@ -152,7 +210,10 @@ def run_agent(session, user_prompt):
         response = chat.send_message(user_prompt)
 
         if not response.text:
-            raise RuntimeError("Gemini returned an empty response.")
+
+            raise RuntimeError(
+                "Gemini returned an empty response."
+            )
 
         print("[AGENT] Response received!", flush=True)
 

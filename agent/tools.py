@@ -6,16 +6,25 @@ def create_tool_registry(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a Pandas DataFrame.")
 
-    # ==================================
+    # ==========================================
+    # PRESERVE ML EXPERIMENT STATE
+    # ==========================================
+
+    run_state = {
+        "active_run": None,
+        "pending_optimization": None
+    }
+
+    # ==========================================
     # TOOL 1: DATASET INSPECTION
-    # ==================================
+    # ==========================================
 
     def inspect_dataset() -> dict:
         """
         Inspect the loaded dataset.
 
-        Returns dataset dimensions, column names, data types,
-        missing values, unique values and duplicate rows.
+        Returns dataset dimensions, column names,
+        data types, missing values and duplicates.
 
         Does not expose actual dataset records.
         """
@@ -38,19 +47,18 @@ def create_tool_registry(df):
             "duplicate_rows": int(df.duplicated().sum())
         }
 
-    # ==================================
+    # ==========================================
     # TOOL 2: COLUMN INSPECTION
-    # ==================================
+    # ==========================================
 
     def inspect_column(column_name: str) -> dict:
         """
-        Inspect a particular dataset column.
+        Inspect a specific dataset column.
 
-        Args:
-            column_name: Name of the column.
+        Returns data type, column category,
+        missing-value count and unique-value count.
 
-        Returns data type, column category, missing values
-        and unique-value count.
+        Does not expose actual column values.
         """
 
         if column_name not in df.columns:
@@ -79,28 +87,20 @@ def create_tool_registry(df):
             "total_records": int(len(column))
         }
 
-    # ==================================
+    # ==========================================
     # TOOL 3: COMPLETE ML ANALYSIS
-    # ==================================
+    # ==========================================
 
     def run_model_analysis(
         target_column: str,
         problem_type: str
     ) -> dict:
         """
-        Run the complete ML workflow.
-
-        Args:
-            target_column: Column the user wants to predict.
-
-            problem_type: Either classification or regression.
-            Must be based on the user's actual prediction objective.
+        Execute the complete ML workflow.
 
         Performs feature-target separation, train-test splitting,
         candidate model selection, preprocessing, training,
         evaluation, ranking and diagnostics.
-
-        Returns actual model results and recommendations.
         """
 
         # Import existing ML components
@@ -113,7 +113,10 @@ def create_tool_registry(df):
         from core.model_comparator import rank_models
         from core.diagnostics import diagnose_models
 
-        # Validate user input
+        # ----------------------------------
+        # INPUT VALIDATION
+        # ----------------------------------
+
         problem_type = problem_type.strip().lower()
 
         if problem_type not in ["classification", "regression"]:
@@ -131,7 +134,7 @@ def create_tool_registry(df):
         if len(df) < 5:
 
             raise ValueError(
-                "Dataset is too small for the current train-test workflow."
+                "Dataset is too small for the current workflow."
             )
 
         if df[target_column].isna().all():
@@ -140,22 +143,43 @@ def create_tool_registry(df):
                 "Target column contains only missing values."
             )
 
-        # STEP 1: Separate features and target
-        X, y = separate_features_target(df, target_column)
+        # ==================================
+        # STEP 1: FEATURE-TARGET SEPARATION
+        # ==================================
+
+        X, y = separate_features_target(
+            df,
+            target_column
+        )
 
         if X.shape[1] == 0:
             raise ValueError("No feature columns available.")
 
-        # STEP 2: Split dataset
-        X_train, X_test, y_train, y_test = split_dataset(X, y)
+        # ==================================
+        # STEP 2: TRAIN-TEST SPLIT
+        # ==================================
 
-        # STEP 3: Select candidate models
+        X_train, X_test, y_train, y_test = split_dataset(
+            X,
+            y
+        )
+
+        # ==================================
+        # STEP 3: MODEL SELECTION
+        # ==================================
+
         models = get_candidate_models(problem_type)
 
-        # STEP 4: Create preprocessing pipeline
+        # ==================================
+        # STEP 4: PREPROCESSING
+        # ==================================
+
         preprocessor = build_preprocessor(X_train)
 
-        # STEP 5: Train models
+        # ==================================
+        # STEP 5: MODEL TRAINING
+        # ==================================
+
         trained_models, training_failures = train_models(
             models,
             preprocessor,
@@ -171,7 +195,10 @@ def create_tool_registry(df):
                 "training_failures": training_failures
             }
 
-        # STEP 6: Evaluate models
+        # ==================================
+        # STEP 6: MODEL EVALUATION
+        # ==================================
+
         evaluation_results, evaluation_failures = evaluate_models(
             trained_models,
             X_test,
@@ -188,13 +215,19 @@ def create_tool_registry(df):
                 "evaluation_failures": evaluation_failures
             }
 
-        # STEP 7: Rank models
+        # ==================================
+        # STEP 7: MODEL RANKING
+        # ==================================
+
         ranked_results, unranked_models, ranking_metric = rank_models(
             evaluation_results,
             problem_type
         )
 
-        # STEP 8: Diagnose models
+        # ==================================
+        # STEP 8: MODEL DIAGNOSTICS
+        # ==================================
+
         diagnostic_results, diagnostic_failures = diagnose_models(
             trained_models,
             X_train,
@@ -204,7 +237,37 @@ def create_tool_registry(df):
             problem_type
         )
 
-        # STEP 9: Prepare results for Gemini
+        # ==================================
+        # STEP 9: PRESERVE EXPERIMENT STATE
+        # ==================================
+
+        run_state["active_run"] = {
+
+            "problem_type": problem_type,
+            "target_column": target_column,
+
+            "trained_models": trained_models,
+
+            "X_train": X_train,
+            "X_test": X_test,
+
+            "y_train": y_train,
+            "y_test": y_test,
+
+            "evaluation_results": evaluation_results,
+            "diagnostic_results": diagnostic_results,
+
+            "ranked_results": ranked_results
+
+        }
+
+        # Clear any previous pending optimization
+        run_state["pending_optimization"] = None
+
+        # ==================================
+        # STEP 10: PREPARE GEMINI RESPONSE
+        # ==================================
+
         model_summaries = []
 
         for model_name, metrics in evaluation_results.items():
@@ -253,9 +316,113 @@ def create_tool_registry(df):
 
         }
 
-    # ==================================
+    # ==========================================
+    # TOOL 4: PREPARE OPTIMIZATION
+    # ==========================================
+
+    def prepare_optimization(model_name: str) -> dict:
+        """
+        Prepare an optimization plan for a trained model.
+
+        Does not modify or retrain any model.
+        User approval will be required before execution.
+        """
+
+        active_run = run_state["active_run"]
+
+        if active_run is None:
+
+            return {
+                "status": "FAILED",
+                "message": (
+                    "Run ML analysis before requesting optimization."
+                )
+            }
+        # Resolve natural-language references to the best model
+        if model_name.strip().lower() in [
+            "best",
+            "best_model",
+            "top",
+            "top_model"
+        ]:
+
+            ranked_results = active_run["ranked_results"]
+
+            if not ranked_results:
+                return {
+                    "status": "FAILED",
+                    "message": "No ranked models are available."
+                }
+
+            model_name = ranked_results[0]["model_name"]
+        trained_models = active_run["trained_models"]
+
+        if model_name not in trained_models:
+
+            return {
+                "status": "FAILED",
+                "message": f"Model '{model_name}' was not found."
+            }
+
+        # Retrieve the diagnostic result
+        diagnosis = active_run["diagnostic_results"].get(
+            model_name
+        )
+
+        if diagnosis is None:
+
+            return {
+                "status": "FAILED",
+                "message": "No diagnostic result is available."
+            }
+
+        # Generate optimization recommendations
+        from core.optimizer import generate_optimization_plan
+
+        plan = generate_optimization_plan({
+            model_name: diagnosis
+        })[model_name]
+
+        # Do not optimize when the results are inconclusive
+        if diagnosis["diagnosis"] == "INCONCLUSIVE":
+            plan["requires_approval"] = False
+
+            return {
+                "status": "OPTIMIZATION_DEFERRED",
+
+                "message": (
+                    "Optimization is deferred because the available "
+                    "dataset is insufficient for a reliable diagnosis."
+                ),
+
+                "plan": plan
+            }
+
+        # Store the pending optimization request
+        run_state["pending_optimization"] = {
+            "model_name": model_name
+        }
+
+        return {
+
+            "status": "AWAITING_USER_APPROVAL",
+
+            "model_name": model_name,
+
+            "recommendations": plan["recommendations"],
+
+            "requires_approval": True,
+
+            "message": (
+                "No changes have been made to the model. "
+                "Explicit user approval is required."
+            )
+
+        }
+
+    # ==========================================
     # TOOL REGISTRY
-    # ==================================
+    # ==========================================
 
     return {
 
@@ -263,6 +430,12 @@ def create_tool_registry(df):
 
         "inspect_column": inspect_column,
 
-        "run_model_analysis": run_model_analysis
+        "run_model_analysis": run_model_analysis,
+
+        "prepare_optimization": prepare_optimization,
+
+        # Internal application state.
+        # Do not expose this as a Gemini tool.
+        "_state": run_state
 
     }
