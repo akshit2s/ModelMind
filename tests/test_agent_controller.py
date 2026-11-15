@@ -62,6 +62,8 @@ def main():
 
             try:
 
+                import json
+
                 response = run_agent(
                     agent_session,
                     user_prompt
@@ -69,6 +71,57 @@ def main():
 
                 print("\n========== MODELMIND ==========")
                 print(response)
+
+
+                # ==================================
+                # CHECK FOR PENDING OPTIMIZATION
+                # ==================================
+
+                tool_registry = agent_session["tool_registry"]
+
+                pending = tool_registry["_state"]["pending_optimization"]
+
+                if pending is not None:
+
+                    print("\n========== OPTIMIZATION APPROVAL ==========")
+
+                    print(
+                        f"Model awaiting approval: {pending['model_name']}"
+                    )
+
+                    approval = input(
+                        "\nDo you approve this optimization? (yes/no): "
+                    ).strip().lower()
+
+                    approved = approval in ["yes", "y"]
+
+                    # Execute the internal Python approval function
+                    result = tool_registry["execute_approved_optimization"](
+                        approved=approved
+                    )
+
+                    print("\n========== OPTIMIZATION EXECUTION ==========")
+
+                    print(json.dumps(result, indent=4, default=str))
+
+                    # Ask Gemini to explain the actual execution result
+                    if result["status"] == "SUCCESS":
+
+                        explanation_prompt = (
+                            "The Python optimization engine returned the following "
+                            "verified results. Explain them to the user accurately. "
+                            "Do not invent additional metrics or claim improvements "
+                            "that are not present in the results.\n\n"
+                            + json.dumps(result, indent=4, default=str)
+                        )
+
+                        explanation = run_agent(
+                            agent_session,
+                            explanation_prompt
+                        )
+
+                        print("\n========== MODELMIND EXPLANATION ==========")
+                        print(explanation)
 
             except Exception as error:
 

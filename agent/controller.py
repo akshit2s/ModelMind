@@ -188,9 +188,10 @@ def create_agent_session(df, max_tool_calls=5):
     )
 
     return {
-        "client": client,
-        "chat": chat
-    }
+    "client": client,
+    "chat": chat,
+    "tool_registry": tool_registry
+}
 
 
 def run_agent(session, user_prompt):

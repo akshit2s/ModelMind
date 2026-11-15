@@ -419,23 +419,152 @@ def create_tool_registry(df):
             )
 
         }
+            # ==================================
+    # EXECUTE APPROVED OPTIMIZATION
+    # ==================================
 
+    def execute_approved_optimization(approved: bool) -> dict:
+        """
+        Execute optimization only after direct user approval.
+
+        This function is internal and is NOT exposed to Gemini.
+        """
+
+        if not isinstance(approved, bool):
+            raise ValueError("Approval must be True or False.")
+
+        pending = run_state["pending_optimization"]
+
+        if pending is None:
+            return {
+                "status": "FAILED",
+                "message": "No optimization request is awaiting approval."
+            }
+
+        # User declined
+        if not approved:
+
+            run_state["pending_optimization"] = None
+
+            return {
+                "status": "CANCELLED",
+                "message": "Optimization cancelled. Original model unchanged."
+            }
+
+        active_run = run_state["active_run"]
+
+        if active_run is None:
+            return {
+                "status": "FAILED",
+                "message": "No active ML experiment exists."
+            }
+
+        model_name = pending["model_name"]
+
+        print(
+            f"\n[OPTIMIZER] Optimizing {model_name}...",
+            flush=True
+        )
+
+        # Execute existing GridSearchCV implementation
+        from core.optimization_runner import optimize_model
+        from core.evaluator import evaluate_models
+
+        try:
+
+            optimization_result = optimize_model(
+                model_name=model_name,
+                trained_model=active_run["trained_models"][model_name],
+                X_train=active_run["X_train"],
+                y_train=active_run["y_train"],
+                problem_type=active_run["problem_type"]
+            )
+
+            if optimization_result["status"] != "SUCCESS":
+
+                run_state["pending_optimization"] = None
+
+                return {
+                    "status": optimization_result["status"],
+                    "message": optimization_result["message"]
+                }
+
+            # Determine whether optimization actually helped
+            improved = optimization_result["improved"]
+
+            if improved:
+
+                selected_model = optimization_result["best_estimator"]
+                selected_version = "optimized"
+
+            else:
+
+                selected_model = active_run["trained_models"][model_name]
+                selected_version = "original"
+
+            # Evaluate the selected model on untouched test data
+            final_results, evaluation_failures = evaluate_models(
+                {model_name: selected_model},
+                active_run["X_test"],
+                active_run["y_test"],
+                active_run["problem_type"]
+            )
+
+            # Preserve the selected model
+            active_run["selected_models"] = active_run.get(
+                "selected_models", {}
+            )
+
+            active_run["selected_models"][model_name] = selected_model
+
+            # Preserve optimization history
+            active_run["optimization_results"] = active_run.get(
+                "optimization_results", {}
+            )
+
+            active_run["optimization_results"][model_name] = {
+                "baseline_cv_score": optimization_result["baseline_cv_score"],
+                "optimized_cv_score": optimization_result["optimized_cv_score"],
+                "improvement": optimization_result["improvement"],
+                "improved": improved,
+                "selected_version": selected_version,
+                "best_params": optimization_result["best_params"]
+            }
+
+            run_state["pending_optimization"] = None
+
+            return {
+                "status": "SUCCESS",
+                "model_name": model_name,
+                "baseline_cv_score": optimization_result["baseline_cv_score"],
+                "optimized_cv_score": optimization_result["optimized_cv_score"],
+                "improvement": optimization_result["improvement"],
+                "improved": improved,
+                "selected_version": selected_version,
+                "best_params": optimization_result["best_params"],
+                "test_metrics": final_results.get(model_name),
+                "evaluation_failures": evaluation_failures
+            }
+
+        except Exception as error:
+
+            run_state["pending_optimization"] = None
+
+            return {
+                "status": "FAILED",
+                "message": str(error)
+            }
     # ==========================================
     # TOOL REGISTRY
     # ==========================================
 
     return {
+    "inspect_dataset": inspect_dataset,
+    "inspect_column": inspect_column,
+    "run_model_analysis": run_model_analysis,
+    "prepare_optimization": prepare_optimization,
 
-        "inspect_dataset": inspect_dataset,
-
-        "inspect_column": inspect_column,
-
-        "run_model_analysis": run_model_analysis,
-
-        "prepare_optimization": prepare_optimization,
-
-        # Internal application state.
-        # Do not expose this as a Gemini tool.
-        "_state": run_state
-
-    }
+    # Internal functions and state
+    "execute_approved_optimization": execute_approved_optimization,
+    "_state": run_state
+}
