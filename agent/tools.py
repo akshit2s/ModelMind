@@ -1,4 +1,5 @@
 import pandas as pd
+from core.leaderboard import render_leaderboard
 
 
 def create_tool_registry(df):
@@ -224,8 +225,16 @@ def create_tool_registry(df):
         ranked_results, unranked_models, ranking_metric = rank_models(
             evaluation_results,
             problem_type
-        )
 
+
+        )
+        primary_metric = "f1" if problem_type == "classification" else "rmse"
+
+        render_leaderboard(
+            ranked_results=ranked_results,
+            problem_type=problem_type,
+            primary_metric=primary_metric
+        )
         # ----------------------------------
         # 9. MODEL DIAGNOSTICS
         # ----------------------------------
@@ -300,10 +309,7 @@ def create_tool_registry(df):
 
             )
 
-            print(
-                f"\n[TRACKER] Experiment saved: {experiment_run_id}",
-                flush=True
-            )
+
 
         except Exception as error:
 
@@ -507,7 +513,7 @@ def create_tool_registry(df):
                 "No changes have been made to the model. "
                 "Explicit user approval is required."
             )
-    
+
         }
         # ==================================
     # TOOL 5: RECENT EXPERIMENT HISTORY
@@ -620,7 +626,7 @@ def create_tool_registry(df):
             # EXECUTE APPROVED OPTIMIZATION
             # ==================================
 
-    
+
 
     def execute_approved_optimization(approved: bool) -> dict:
         """

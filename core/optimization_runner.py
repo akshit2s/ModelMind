@@ -1,3 +1,5 @@
+import numpy as np
+
 from sklearn.model_selection import (
     GridSearchCV,
     KFold,
@@ -5,6 +7,12 @@ from sklearn.model_selection import (
     cross_val_score
 )
 
+from core.optimizer import get_parameter_grid
+
+
+# ============================================================
+# MODEL OPTIMIZATION
+# ============================================================
 
 def optimize_model(
     model_name,
@@ -14,94 +22,55 @@ def optimize_model(
     problem_type
 ):
 
-    # ==================================
-    # 1. VALIDATION
-    # ==================================
+    # ========================================================
+    # 1. INPUT VALIDATION
+    # ========================================================
 
     if problem_type not in ["classification", "regression"]:
         raise ValueError("Unsupported problem type.")
 
     if len(X_train) != len(y_train):
-        raise ValueError("Training features and target lengths differ.")
+        raise ValueError(
+            "Training features and target lengths differ."
+        )
 
     if len(X_train) < 30:
+
         return {
             "status": "INCONCLUSIVE",
-            "message": "Insufficient training records for reliable optimization."
+            "message": (
+                "Insufficient training records for "
+                "reliable optimization."
+            )
         }
 
-    # ==================================
-    # 2. HYPERPARAMETER SEARCH SPACES
-    # ==================================
+    # ========================================================
+    # 2. GET CENTRALIZED PARAMETER GRID
+    # ========================================================
 
-    parameter_grids = {
-
-        "Logistic Regression": {
-            "model__C": [0.1, 1, 10]
-        },
-
-        "Linear Regression": {
-            "model__fit_intercept": [True, False]
-        },
-
-        "Decision Tree": {
-            "model__max_depth": [None, 3, 5, 10],
-            "model__min_samples_split": [2, 5],
-            "model__min_samples_leaf": [1, 2]
-        },
-
-        "Random Forest": {
-            "model__n_estimators": [100, 200],
-            "model__max_depth": [None, 5, 10],
-            "model__min_samples_leaf": [1, 2]
-        },
-
-        "Gradient Boosting": {
-            "model__n_estimators": [50, 100],
-            "model__learning_rate": [0.05, 0.1],
-            "model__max_depth": [1, 3]
-        }
-    }
-
-    # Support Vector Models
-    if model_name in [
-        "Support Vector Machine",
-        "Support Vector Regression"
-    ]:
-
-        parameter_grid = [
-
-            {
-                "model__C": [0.1, 1, 10],
-                "model__kernel": ["linear"]
-            },
-
-            {
-                "model__C": [0.1, 1, 10],
-                "model__kernel": ["rbf"],
-                "model__gamma": ["scale", "auto"]
-            }
-
-        ]
-
-    else:
-
-        parameter_grid = parameter_grids.get(model_name)
+    parameter_grid = get_parameter_grid(model_name)
 
     if parameter_grid is None:
 
         return {
             "status": "UNSUPPORTED",
-            "message": f"No optimization configuration for {model_name}."
+            "message": (
+                f"No optimization configuration "
+                f"for {model_name}."
+            )
         }
 
-    # ==================================
+    # ========================================================
     # 3. CROSS-VALIDATION CONFIGURATION
-    # ==================================
+    # ========================================================
 
     if problem_type == "classification":
 
-        class_counts = y_train.value_counts()
+        # Works with both NumPy arrays and Pandas Series.
+        _, class_counts = np.unique(
+            np.asarray(y_train),
+            return_counts=True
+        )
 
         cv_splits = min(
             5,
@@ -112,7 +81,10 @@ def optimize_model(
 
             return {
                 "status": "INCONCLUSIVE",
-                "message": "Insufficient examples per class for cross-validation."
+                "message": (
+                    "Insufficient examples per class "
+                    "for cross-validation."
+                )
             }
 
         cv = StratifiedKFold(
@@ -131,7 +103,9 @@ def optimize_model(
 
             return {
                 "status": "INCONCLUSIVE",
-                "message": "Insufficient records for cross-validation."
+                "message": (
+                    "Insufficient records for cross-validation."
+                )
             }
 
         cv = KFold(
@@ -142,87 +116,110 @@ def optimize_model(
 
         scoring = "neg_root_mean_squared_error"
 
-    # ==================================
-    # 4. EVALUATE ORIGINAL MODEL
-    # ==================================
+    # ========================================================
+    # 4. RUN BASELINE AND GRID SEARCH
+    # ========================================================
 
-    baseline_scores = cross_val_score(
-        estimator=trained_model,
-        X=X_train,
-        y=y_train,
-        scoring=scoring,
-        cv=cv,
-        n_jobs=-1
-    )
+    try:
 
-    baseline_cv_score = float(baseline_scores.mean())
-
-    # ==================================
-    # 5. RUN GRID SEARCH
-    # ==================================
-
-    search = GridSearchCV(
-        estimator=trained_model,
-        param_grid=parameter_grid,
-        scoring=scoring,
-        cv=cv,
-        n_jobs=-1,
-        refit=True
-    )
-
-    search.fit(X_train, y_train)
-
-    # ==================================
-    # 6. EXTRACT OPTIMIZED SCORE
-    # ==================================
-
-    optimized_cv_score = float(search.best_score_)
-
-    # Convert negative RMSE into positive RMSE
-    if problem_type == "regression":
-
-        baseline_cv_score = -baseline_cv_score
-
-        optimized_cv_score = -optimized_cv_score
-
-    # ==================================
-    # 7. CALCULATE IMPROVEMENT
-    # ==================================
-
-    if problem_type == "classification":
-
-        improvement = (
-            optimized_cv_score - baseline_cv_score
+        # Evaluate the original model.
+        baseline_scores = cross_val_score(
+            estimator=trained_model,
+            X=X_train,
+            y=y_train,
+            scoring=scoring,
+            cv=cv,
+            n_jobs=-1,
+            error_score="raise"
         )
 
-    else:
-
-        improvement = (
-            baseline_cv_score - optimized_cv_score
+        baseline_cv_score = float(
+            baseline_scores.mean()
         )
 
-    improved = improvement > 0.000001
+        # Search the supported hyperparameter combinations.
+        search = GridSearchCV(
+            estimator=trained_model,
+            param_grid=parameter_grid,
+            scoring=scoring,
+            cv=cv,
+            n_jobs=-1,
+            refit=True,
+            error_score="raise"
+        )
 
-    # ==================================
-    # 8. RETURN OPTIMIZATION RESULTS
-    # ==================================
+        search.fit(X_train, y_train)
 
-    return {
+        optimized_cv_score = float(
+            search.best_score_
+        )
 
-        "status": "SUCCESS",
+        # ====================================================
+        # 5. NORMALIZE METRICS
+        # ====================================================
 
-        "best_estimator": search.best_estimator_,
+        # Scikit-learn uses negative RMSE for optimization.
+        # Convert it into positive RMSE for reporting.
 
-        "best_params": search.best_params_,
+        if problem_type == "regression":
 
-        "baseline_cv_score": baseline_cv_score,
+            baseline_cv_score = -baseline_cv_score
 
-        "optimized_cv_score": optimized_cv_score,
+            optimized_cv_score = -optimized_cv_score
 
-        "improvement": improvement,
+        # ====================================================
+        # 6. CALCULATE IMPROVEMENT
+        # ====================================================
 
-        "improved": improved,
+        if problem_type == "classification":
 
-        "message": "Hyperparameter optimization completed."
+            improvement = (
+                optimized_cv_score - baseline_cv_score
+            )
 
-    }
+        else:
+
+            improvement = (
+                baseline_cv_score - optimized_cv_score
+            )
+
+        improved = improvement > 0.000001
+
+        # ====================================================
+        # 7. RETURN RESULTS
+        # ====================================================
+
+        return {
+
+            "status": "SUCCESS",
+
+            "best_estimator": search.best_estimator_,
+
+            "best_params": search.best_params_,
+
+            "baseline_cv_score": baseline_cv_score,
+
+            "optimized_cv_score": optimized_cv_score,
+
+            "improvement": improvement,
+
+            "improved": improved,
+
+            "message": (
+                "Hyperparameter optimization completed."
+            )
+
+        }
+
+    except Exception as error:
+
+        return {
+
+            "status": "FAILED",
+
+            "message": (
+                f"Optimization failed: "
+                f"{type(error).__name__}: {error}"
+            )
+
+        }
