@@ -87,7 +87,8 @@ def create_tool_registry(df):
             "total_records": int(len(column))
         }
 
-    # ==========================================
+
+       # ==========================================
     # TOOL 3: COMPLETE ML ANALYSIS
     # ==========================================
 
@@ -95,12 +96,13 @@ def create_tool_registry(df):
         target_column: str,
         problem_type: str
     ) -> dict:
+
         """
         Execute the complete ML workflow.
 
         Performs feature-target separation, train-test splitting,
-        candidate model selection, preprocessing, training,
-        evaluation, ranking and diagnostics.
+        model selection, preprocessing, training, evaluation,
+        ranking, diagnostics and experiment tracking.
         """
 
         # Import existing ML components
@@ -113,39 +115,41 @@ def create_tool_registry(df):
         from core.model_comparator import rank_models
         from core.diagnostics import diagnose_models
 
+        # Import experiment tracking
+        from core.experiment_tracker import (
+            save_experiment_run,
+            create_dataset_fingerprint
+        )
+
         # ----------------------------------
-        # INPUT VALIDATION
+        # 1. INPUT VALIDATION
         # ----------------------------------
 
         problem_type = problem_type.strip().lower()
 
         if problem_type not in ["classification", "regression"]:
-
             raise ValueError(
                 "Problem type must be classification or regression."
             )
 
         if target_column not in df.columns:
-
             raise ValueError(
                 f"Target column '{target_column}' not found."
             )
 
-        if len(df) < 5:
-
-            raise ValueError(
-                "Dataset is too small for the current workflow."
-            )
-
         if df[target_column].isna().all():
-
             raise ValueError(
                 "Target column contains only missing values."
             )
 
-        # ==================================
-        # STEP 1: FEATURE-TARGET SEPARATION
-        # ==================================
+        if len(df) < 5:
+            raise ValueError(
+                "Dataset is too small for the current workflow."
+            )
+
+        # ----------------------------------
+        # 2. FEATURE-TARGET SEPARATION
+        # ----------------------------------
 
         X, y = separate_features_target(
             df,
@@ -155,30 +159,30 @@ def create_tool_registry(df):
         if X.shape[1] == 0:
             raise ValueError("No feature columns available.")
 
-        # ==================================
-        # STEP 2: TRAIN-TEST SPLIT
-        # ==================================
+        # ----------------------------------
+        # 3. TRAIN-TEST SPLIT
+        # ----------------------------------
 
         X_train, X_test, y_train, y_test = split_dataset(
             X,
             y
         )
 
-        # ==================================
-        # STEP 3: MODEL SELECTION
-        # ==================================
+        # ----------------------------------
+        # 4. MODEL SELECTION
+        # ----------------------------------
 
         models = get_candidate_models(problem_type)
 
-        # ==================================
-        # STEP 4: PREPROCESSING
-        # ==================================
+        # ----------------------------------
+        # 5. PREPROCESSING
+        # ----------------------------------
 
         preprocessor = build_preprocessor(X_train)
 
-        # ==================================
-        # STEP 5: MODEL TRAINING
-        # ==================================
+        # ----------------------------------
+        # 6. MODEL TRAINING
+        # ----------------------------------
 
         trained_models, training_failures = train_models(
             models,
@@ -188,16 +192,15 @@ def create_tool_registry(df):
         )
 
         if not trained_models:
-
             return {
                 "status": "FAILED",
                 "message": "All candidate models failed to train.",
                 "training_failures": training_failures
             }
 
-        # ==================================
-        # STEP 6: MODEL EVALUATION
-        # ==================================
+        # ----------------------------------
+        # 7. MODEL EVALUATION
+        # ----------------------------------
 
         evaluation_results, evaluation_failures = evaluate_models(
             trained_models,
@@ -207,7 +210,6 @@ def create_tool_registry(df):
         )
 
         if not evaluation_results:
-
             return {
                 "status": "FAILED",
                 "message": "No models could be evaluated.",
@@ -215,18 +217,18 @@ def create_tool_registry(df):
                 "evaluation_failures": evaluation_failures
             }
 
-        # ==================================
-        # STEP 7: MODEL RANKING
-        # ==================================
+        # ----------------------------------
+        # 8. MODEL RANKING
+        # ----------------------------------
 
         ranked_results, unranked_models, ranking_metric = rank_models(
             evaluation_results,
             problem_type
         )
 
-        # ==================================
-        # STEP 8: MODEL DIAGNOSTICS
-        # ==================================
+        # ----------------------------------
+        # 9. MODEL DIAGNOSTICS
+        # ----------------------------------
 
         diagnostic_results, diagnostic_failures = diagnose_models(
             trained_models,
@@ -237,13 +239,93 @@ def create_tool_registry(df):
             problem_type
         )
 
-        # ==================================
-        # STEP 9: PRESERVE EXPERIMENT STATE
-        # ==================================
+        # ----------------------------------
+        # 10. EXPERIMENT TRACKING
+        # ----------------------------------
+
+        experiment_run_id = None
+        tracking_error = None
+        dataset_fingerprint = None
+
+        try:
+
+            dataset_fingerprint = create_dataset_fingerprint(df)
+
+            # Assign model rankings
+            rank_positions = {
+                result["model_name"]: position
+                for position, result in enumerate(
+                    ranked_results,
+                    start=1
+                )
+            }
+
+            # Prepare records for SQLite
+            model_records = []
+
+            for model_name, metrics in evaluation_results.items():
+
+                diagnosis = diagnostic_results.get(
+                    model_name, {}
+                )
+
+                model_records.append({
+
+                    "model_name": model_name,
+
+                    "metrics": metrics,
+
+                    "rank": rank_positions.get(model_name),
+
+                    "diagnosis": diagnosis.get("diagnosis"),
+
+                    "optimization_status": None
+
+                })
+
+            # Save experiment
+            experiment_run_id = save_experiment_run(
+
+                problem_type=problem_type,
+
+                target_column=target_column,
+
+                dataset_rows=len(df),
+
+                feature_count=X.shape[1],
+
+                model_records=model_records,
+
+                dataset_fingerprint=dataset_fingerprint
+
+            )
+
+            print(
+                f"\n[TRACKER] Experiment saved: {experiment_run_id}",
+                flush=True
+            )
+
+        except Exception as error:
+
+            tracking_error = str(error)
+
+            print(
+                f"\n[TRACKER] Saving failed: {tracking_error}",
+                flush=True
+            )
+
+        # ----------------------------------
+        # 11. PRESERVE EXPERIMENT STATE
+        # ----------------------------------
 
         run_state["active_run"] = {
 
+            "run_id": experiment_run_id,
+
+            "dataset_fingerprint": dataset_fingerprint,
+
             "problem_type": problem_type,
+
             "target_column": target_column,
 
             "trained_models": trained_models,
@@ -255,18 +337,19 @@ def create_tool_registry(df):
             "y_test": y_test,
 
             "evaluation_results": evaluation_results,
+
             "diagnostic_results": diagnostic_results,
 
             "ranked_results": ranked_results
 
         }
 
-        # Clear any previous pending optimization
+        # Clear previous optimization request
         run_state["pending_optimization"] = None
 
-        # ==================================
-        # STEP 10: PREPARE GEMINI RESPONSE
-        # ==================================
+        # ----------------------------------
+        # 12. PREPARE RESULTS FOR GEMINI
+        # ----------------------------------
 
         model_summaries = []
 
@@ -284,9 +367,17 @@ def create_tool_registry(df):
 
             })
 
+        # ----------------------------------
+        # 13. RETURN RESULTS
+        # ----------------------------------
+
         return {
 
             "status": "SUCCESS",
+
+            "experiment_run_id": experiment_run_id,
+
+            "experiment_tracking_error": tracking_error,
 
             "problem_type": problem_type,
 
@@ -315,7 +406,6 @@ def create_tool_registry(df):
             "diagnostic_failures": diagnostic_failures
 
         }
-
     # ==========================================
     # TOOL 4: PREPARE OPTIMIZATION
     # ==========================================
@@ -420,14 +510,15 @@ def create_tool_registry(df):
 
         }
             # ==================================
-    # EXECUTE APPROVED OPTIMIZATION
-    # ==================================
+            # EXECUTE APPROVED OPTIMIZATION
+            # ==================================
+
+    
 
     def execute_approved_optimization(approved: bool) -> dict:
         """
-        Execute optimization only after direct user approval.
-
-        This function is internal and is NOT exposed to Gemini.
+        Execute optimization only after explicit user approval.
+        Save successful optimization results to SQLite.
         """
 
         if not isinstance(approved, bool):
@@ -466,12 +557,12 @@ def create_tool_registry(df):
             flush=True
         )
 
-        # Execute existing GridSearchCV implementation
         from core.optimization_runner import optimize_model
         from core.evaluator import evaluate_models
 
         try:
 
+            # STEP 1: Run hyperparameter optimization
             optimization_result = optimize_model(
                 model_name=model_name,
                 trained_model=active_run["trained_models"][model_name],
@@ -489,7 +580,7 @@ def create_tool_registry(df):
                     "message": optimization_result["message"]
                 }
 
-            # Determine whether optimization actually helped
+            # STEP 2: Select the better configuration
             improved = optimization_result["improved"]
 
             if improved:
@@ -502,7 +593,7 @@ def create_tool_registry(df):
                 selected_model = active_run["trained_models"][model_name]
                 selected_version = "original"
 
-            # Evaluate the selected model on untouched test data
+            # STEP 3: Evaluate on untouched test data
             final_results, evaluation_failures = evaluate_models(
                 {model_name: selected_model},
                 active_run["X_test"],
@@ -510,14 +601,16 @@ def create_tool_registry(df):
                 active_run["problem_type"]
             )
 
-            # Preserve the selected model
+            final_test_metrics = final_results.get(model_name, {})
+
+            # STEP 4: Preserve selected model
             active_run["selected_models"] = active_run.get(
                 "selected_models", {}
             )
 
             active_run["selected_models"][model_name] = selected_model
 
-            # Preserve optimization history
+            # STEP 5: Preserve optimization results in memory
             active_run["optimization_results"] = active_run.get(
                 "optimization_results", {}
             )
@@ -531,6 +624,55 @@ def create_tool_registry(df):
                 "best_params": optimization_result["best_params"]
             }
 
+            # STEP 6: Save optimization history to SQLite
+            optimization_tracking_error = None
+
+            run_id = active_run.get("run_id")
+
+            if run_id:
+
+                try:
+
+                    from core.optimization_history import (
+                        save_optimization_result
+                    )
+
+                    save_optimization_result(
+                        run_id=run_id,
+                        model_name=model_name,
+                        result={
+                            "status": "SUCCESS",
+                            "baseline_cv_score": optimization_result["baseline_cv_score"],
+                            "optimized_cv_score": optimization_result["optimized_cv_score"],
+                            "improvement": optimization_result["improvement"],
+                            "improved": improved,
+                            "selected_version": selected_version,
+                            "best_params": optimization_result["best_params"]
+                        },
+                        final_test_metrics=final_test_metrics
+                    )
+
+                    print(
+                        "[TRACKER] Optimization history saved.",
+                        flush=True
+                    )
+
+                except Exception as error:
+
+                    optimization_tracking_error = str(error)
+
+                    print(
+                        f"[TRACKER] History saving failed: {error}",
+                        flush=True
+                    )
+
+            else:
+
+                optimization_tracking_error = (
+                    "No experiment ID available for tracking."
+                )
+
+            # STEP 7: Clear pending approval
             run_state["pending_optimization"] = None
 
             return {
@@ -542,8 +684,9 @@ def create_tool_registry(df):
                 "improved": improved,
                 "selected_version": selected_version,
                 "best_params": optimization_result["best_params"],
-                "test_metrics": final_results.get(model_name),
-                "evaluation_failures": evaluation_failures
+                "test_metrics": final_test_metrics,
+                "evaluation_failures": evaluation_failures,
+                "optimization_tracking_error": optimization_tracking_error
             }
 
         except Exception as error:

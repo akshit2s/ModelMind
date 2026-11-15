@@ -4,6 +4,10 @@ from sklearn.datasets import make_regression
 
 from agent.tools import create_tool_registry
 
+from core.optimization_history import (
+    get_optimization_history
+)
+
 
 def main():
 
@@ -11,10 +15,7 @@ def main():
     print("      MODELMIND OPTIMIZATION TEST")
     print("======================================")
 
-    # ==================================
-    # 1. GENERATE SYNTHETIC DATASET
-    # ==================================
-
+    # STEP 1: Generate synthetic dataset
     X, y = make_regression(
         n_samples=500,
         n_features=5,
@@ -23,7 +24,7 @@ def main():
         random_state=42
     )
 
-    feature_names = [
+    columns = [
         "Feature_1",
         "Feature_2",
         "Feature_3",
@@ -31,126 +32,94 @@ def main():
         "Feature_5"
     ]
 
-    df = pd.DataFrame(X, columns=feature_names)
-
+    df = pd.DataFrame(X, columns=columns)
     df["Target"] = y
 
-    print("\n[+] Synthetic dataset generated.")
-    print(f"Records: {len(df)}")
-    print(f"Features: {len(feature_names)}")
+    print("\n[+] Dataset generated:", df.shape)
 
-    # ==================================
-    # 2. CREATE TOOL REGISTRY
-    # ==================================
-
+    # STEP 2: Create tools
     tools = create_tool_registry(df)
 
-    # ==================================
-    # 3. RUN ML ANALYSIS
-    # ==================================
-
-    print("\n========== MODEL ANALYSIS ==========")
-
+    # STEP 3: Run ML analysis
     analysis = tools["run_model_analysis"](
         target_column="Target",
         problem_type="regression"
     )
 
     if analysis["status"] != "SUCCESS":
-
-        print("[ERROR] ML analysis failed.")
-        print(analysis)
+        print("[ERROR] Analysis failed:", analysis)
         return
 
-    print("\nRanking metric:", analysis["ranking_metric"])
+    run_id = analysis.get("experiment_run_id")
 
-    print("\nRanked models:")
+    print("\nExperiment ID:", run_id)
 
-    for model in analysis["ranked_models"]:
-
-        print(
-            model["model_name"],
-            model["metric_value"]
-        )
-
-    # ==================================
-    # 4. SELECT BEST MODEL
-    # ==================================
-
+    # STEP 4: Select best model
     if not analysis["ranked_models"]:
-
-        print("No models available for ranking.")
+        print("No models available.")
         return
 
     best_model = analysis["ranked_models"][0]["model_name"]
 
-    print("\nBest candidate:", best_model)
+    print("Best model:", best_model)
 
-    # ==================================
-    # 5. GENERATE OPTIMIZATION PLAN
-    # ==================================
-
-    print("\n========== OPTIMIZATION PLAN ==========")
-
+    # STEP 5: Prepare optimization
     plan = tools["prepare_optimization"](
         model_name="best_model"
     )
 
-    print(plan)
+    print("\nOptimization plan:", plan)
 
     if plan["status"] != "AWAITING_USER_APPROVAL":
-
-        print("\nOptimization cannot proceed.")
-        print("Reason:", plan["status"])
+        print("Optimization unavailable:", plan["status"])
         return
 
-    # ==================================
-    # 6. ASK FOR USER APPROVAL
-    # ==================================
-
-    print("\n========== APPROVAL REQUIRED ==========")
-
-    for recommendation in plan["recommendations"]:
-        print("-", recommendation)
-
+    # STEP 6: Request approval
     approval = input(
-        "\nDo you approve optimization? (yes/no): "
+        "\nApprove optimization? (yes/no): "
     ).strip().lower()
 
     approved = approval in ["yes", "y"]
 
-    # ==================================
-    # 7. EXECUTE APPROVED OPTIMIZATION
-    # ==================================
-
+    # STEP 7: Execute approved optimization
     result = tools["execute_approved_optimization"](
         approved=approved
     )
 
     print("\n========== OPTIMIZATION RESULTS ==========")
+    print(result)
 
-    print("Status:", result["status"])
+    # STEP 8: Retrieve saved history
+    if result["status"] == "SUCCESS" and run_id:
 
-    if result["status"] == "SUCCESS":
+        print("\n========== SAVED OPTIMIZATION HISTORY ==========")
 
-        print("Model:", result["model_name"])
+        history = get_optimization_history(run_id=run_id)
 
-        print("Original CV score:", result["baseline_cv_score"])
+        for record in history:
 
-        print("Optimized CV score:", result["optimized_cv_score"])
+            print("\nModel:", record["model_name"])
+            print("Status:", record["status"])
 
-        print("Improvement:", result["improvement"])
+            print(
+                "Original CV score:",
+                record["baseline_cv_score"]
+            )
 
-        print("Improved:", result["improved"])
+            print(
+                "Optimized CV score:",
+                record["optimized_cv_score"]
+            )
 
-        print("Selected version:", result["selected_version"])
+            print(
+                "Selected version:",
+                record["selected_version"]
+            )
 
-        print("\nFinal test metrics:")
-        print(result["test_metrics"])
-
-    else:
-
-        print(result.get("message", "Optimization unsuccessful."))
+            print(
+                "Final test metrics:",
+                record["final_test_metrics"]
+            )
 
 
 if __name__ == "__main__":
