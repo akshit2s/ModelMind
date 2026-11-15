@@ -37,9 +37,33 @@ def create_agent_session(df, max_tool_calls=5):
             column_name=column_name
         )
 
+    def run_model_analysis(
+        target_column: str,
+        problem_type: str
+    ) -> dict:
+        """
+        Execute the complete ML workflow.
+
+        Requires the target column and prediction problem type.
+
+        Runs model selection, preprocessing, training,
+        evaluation, ranking and diagnostics.
+        """
+
+        print("\n[TOOL] Starting ML analysis...", flush=True)
+
+        result = tool_registry["run_model_analysis"](
+            target_column=target_column,
+            problem_type=problem_type
+        )
+
+        print("[TOOL] ML analysis completed.", flush=True)
+
+        return result
     available_tools = [
         inspect_dataset,
-        inspect_column
+        inspect_column,
+        run_model_analysis
     ]
 
     # ----------------------------------
@@ -47,30 +71,32 @@ def create_agent_session(df, max_tool_calls=5):
     # ----------------------------------
 
     system_instruction = (
-        MODELMIND_SYSTEM_INSTRUCTION
-        + """
+    MODELMIND_SYSTEM_INSTRUCTION
+    + """
 
-        CONVERSATION RULES:
+    ML ANALYSIS RULES:
 
-        1. Remember previous messages in the current conversation.
+1. Use run_model_analysis when the user explicitly
+   requests model training, evaluation or comparison.
 
-        2. Understand references such as "it",
-           "that column" and "previous result".
+2. Identify the target column from the user's objective.
 
-        3. Use previous tool results when relevant.
+3. Determine classification or regression from the
+   actual prediction objective.
 
-        4. Never invent dataset statistics.
+4. Never infer the problem type solely from unique values.
 
-        5. Never expose actual dataset records.
+5. Do not execute ML analysis until the target column
+   and problem type are clear.
 
-        6. Available tools are read-only.
+6. Report actual evaluation results returned by Python.
 
-        7. Never claim to have trained or modified
-           a model unless the operation was executed.
+7. Clearly explain when the dataset is too small
+   for reliable evaluation.
 
-        """
-    )
-
+8. Never invent model performance metrics.
+    """
+)
     # ----------------------------------
     # CREATE CLIENT
     # ----------------------------------
