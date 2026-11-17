@@ -11,7 +11,7 @@ from agent.controller import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_DATASET = "datasets/students.csv"
+DEFAULT_DATASET = "datasets/classification_demo.csv"
 
 
 def display_banner():

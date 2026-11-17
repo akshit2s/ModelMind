@@ -69,38 +69,230 @@ function WorkflowCard({ number, icon: Icon, title, text, last }) {
 
 function Overview({ setPage, dataset, experiments, apiOnline }) {
   const recent = experiments?.[0];
-  return <>
-    <PageHeading eyebrow="YOUR MACHINE LEARNING WORKSPACE" title={<>Make better models.<br/><span className="heading-accent">Make informed decisions.</span></>} description="Inspect datasets, compare machine learning models and explore optimization in one guided workspace." action={<button className="button button-primary" onClick={() => setPage('analysis')}><Plus size={17}/> New analysis <ArrowRight size={16}/></button>} />
-    {!apiOnline && <div className="connection-banner"><CircleAlert size={18}/><div><strong>Python API is not connected.</strong><span>Start the backend with <code>python -m uvicorn api.main:app --reload</code> to use live analysis features.</span></div></div>}
-    <section className="stats-grid">
-      <StatCard label="Current dataset" value={dataset ? dataset.filename : 'None'} detail={dataset ? `${dataset.rows} rows · ${dataset.columns} columns` : 'Upload a CSV to begin'} icon={Database} />
-      <StatCard label="Model workflow" value="10" detail="Candidate model families" icon={Layers3} />
-      <StatCard label="Experiment runs" value={String(experiments.length)} detail="Saved in SQLite" icon={History} />
-      <StatCard label="Python API" value={apiOnline ? 'Online' : 'Offline'} detail={apiOnline ? 'Ready for requests' : 'Waiting for connection'} icon={Activity} tag={apiOnline ? 'CONNECTED' : 'NOT CONNECTED'} />
-    </section>
-    <section className="section-block">
-      <div className="section-title-row"><div><div className="eyebrow">THE PROCESS</div><h2>From raw data to a model you understand.</h2></div><span className="section-aside">A five-stage workflow</span></div>
-      <div className="workflow-grid">
-        <WorkflowCard number="01" icon={Database} title="Inspect data" text="Understand columns, data types, missing values and dataset shape." />
-        <WorkflowCard number="02" icon={FlaskConical} title="Define the task" text="Choose a prediction target and classification or regression." />
-        <WorkflowCard number="03" icon={BarChart3} title="Train & compare" text="Evaluate candidate models with task-specific metrics." />
-        <WorkflowCard number="04" icon={SlidersHorizontal} title="Optimize" text="Review tuning suggestions and approve an optimization run." />
-        <WorkflowCard number="05" icon={History} title="Track results" text="Save experiments and revisit previous comparisons." last />
-      </div>
-    </section>
-    <section className="bottom-grid">
-      <article className="panel recent-panel"><div className="panel-heading"><div><div className="eyebrow">YOUR WORK</div><h2>Recent experiments</h2></div><button className="text-button" onClick={() => setPage('experiments')}>View history <ArrowRight size={15}/></button></div>
-      recent.target_column ||
-(typeof recent.best_model === 'string'
-  ? recent.best_model
-  : recent.best_model?.model_name || recent.best_model_name) ||
-'Saved experiment'
-      </article>
-      <article className="panel insight-panel"><div className="insight-icon"><Sparkles size={19}/></div><div className="eyebrow">DESIGNED TO EXPLAIN</div><h2>More than a model score.</h2><p>ModelMind combines model evaluation with diagnostics and optimization recommendations to help you understand what to try next.</p><button className="text-button" onClick={() => setPage('about')}>Explore the workflow <ArrowRight size={15}/></button><div className="decor-orbit orbit-one"/><div className="decor-orbit orbit-two"/></article>
-    </section>
-  </>;
-}
 
+  const recentTitle = recent
+    ? recent.target_column ||
+      (typeof recent.best_model === 'string'
+        ? recent.best_model
+        : recent.best_model?.model_name || recent.best_model_name) ||
+      'Saved experiment'
+    : '';
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="YOUR MACHINE LEARNING WORKSPACE"
+        title={
+          <>
+            Make better models.
+            <br />
+            <span className="heading-accent">
+              Make informed decisions.
+            </span>
+          </>
+        }
+        description="Inspect datasets, compare machine learning models and explore optimization in one guided workspace."
+        action={
+          <button
+            className="button button-primary"
+            onClick={() => setPage('analysis')}
+          >
+            <Plus size={17} /> New analysis <ArrowRight size={16} />
+          </button>
+        }
+      />
+
+      {!apiOnline && (
+        <div className="connection-banner">
+          <CircleAlert size={18} />
+          <div>
+            <strong>Python API is not connected.</strong>
+            <span>
+              Start the backend with{' '}
+              <code>python -m uvicorn api.main:app --reload</code>{' '}
+              to use live analysis features.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <section className="stats-grid">
+        <StatCard
+          label="Current dataset"
+          value={dataset ? dataset.filename : 'None'}
+          detail={
+            dataset
+              ? `${dataset.rows} rows · ${dataset.columns} columns`
+              : 'Upload a CSV to begin'
+          }
+          icon={Database}
+        />
+
+        <StatCard
+          label="Model workflow"
+          value="10"
+          detail="Candidate model families"
+          icon={Layers3}
+        />
+
+        <StatCard
+          label="Experiment runs"
+          value={String(experiments.length)}
+          detail="Saved in SQLite"
+          icon={History}
+        />
+
+        <StatCard
+          label="Python API"
+          value={apiOnline ? 'Online' : 'Offline'}
+          detail={
+            apiOnline
+              ? 'Ready for requests'
+              : 'Waiting for connection'
+          }
+          icon={Activity}
+          tag={apiOnline ? 'CONNECTED' : 'NOT CONNECTED'}
+        />
+      </section>
+
+      <section className="section-block">
+        <div className="section-title-row">
+          <div>
+            <div className="eyebrow">THE PROCESS</div>
+            <h2>From raw data to a model you understand.</h2>
+          </div>
+          <span className="section-aside">
+            A five-stage workflow
+          </span>
+        </div>
+
+        <div className="workflow-grid">
+          <WorkflowCard
+            number="01"
+            icon={Database}
+            title="Inspect data"
+            text="Understand columns, data types, missing values and dataset shape."
+          />
+
+          <WorkflowCard
+            number="02"
+            icon={FlaskConical}
+            title="Define the task"
+            text="Choose a prediction target and classification or regression."
+          />
+
+          <WorkflowCard
+            number="03"
+            icon={BarChart3}
+            title="Train & compare"
+            text="Evaluate candidate models with task-specific metrics."
+          />
+
+          <WorkflowCard
+            number="04"
+            icon={SlidersHorizontal}
+            title="Optimize"
+            text="Review tuning suggestions and approve an optimization run."
+          />
+
+          <WorkflowCard
+            number="05"
+            icon={History}
+            title="Track results"
+            text="Save experiments and revisit previous comparisons."
+            last
+          />
+        </div>
+      </section>
+
+      <section className="bottom-grid">
+        <article className="panel recent-panel">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">YOUR WORK</div>
+              <h2>Recent experiments</h2>
+            </div>
+
+            <button
+              className="text-button"
+              onClick={() => setPage('experiments')}
+            >
+              View history <ArrowRight size={15} />
+            </button>
+          </div>
+
+          {recent ? (
+            <div className="recent-run">
+              <div className="recent-run-icon">
+                <FileChartColumn size={21} />
+              </div>
+
+              <div>
+                <strong>{recentTitle}</strong>
+
+                <p>
+                  {recent.problem_type || 'ML run'} ·{' '}
+                  {recent.model_count ??
+                    recent.models?.length ??
+                    '—'}{' '}
+                  model records
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">
+                <FileChartColumn size={22} />
+              </div>
+
+              <strong>
+                Experiment history will appear here
+              </strong>
+
+              <p>
+                Run an analysis to see saved model comparisons
+                and results in this space.
+              </p>
+
+              <button
+                className="button button-secondary button-small"
+                onClick={() => setPage('analysis')}
+              >
+                Start an analysis <ArrowRight size={15} />
+              </button>
+            </div>
+          )}
+        </article>
+
+        <article className="panel insight-panel">
+          <div className="insight-icon">
+            <Sparkles size={19} />
+          </div>
+
+          <div className="eyebrow">DESIGNED TO EXPLAIN</div>
+
+          <h2>More than a model score.</h2>
+
+          <p>
+            ModelMind combines model evaluation with diagnostics
+            and optimization recommendations to help you
+            understand what to try next.
+          </p>
+
+          <button
+            className="text-button"
+            onClick={() => setPage('about')}
+          >
+            Explore the workflow <ArrowRight size={15} />
+          </button>
+
+          <div className="decor-orbit orbit-one" />
+          <div className="decor-orbit orbit-two" />
+        </article>
+      </section>
+    </>
+  );
+}
 function Analysis({
   selectedFile,
   setSelectedFile,
